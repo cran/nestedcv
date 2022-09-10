@@ -22,6 +22,11 @@
 #'   character vector with names of filtered predictors.
 #' @param filter_options List of additional arguments passed to the filter
 #'   function specified by `filterFUN`.
+#' @param balance Specifies method for dealing with imbalanced class data.
+#'   Current options are `"randomsample"` or `"smote"`. See [randomsample()] and
+#'   [smote()]
+#' @param balance_options List of additional arguments passed to the balancing
+#'   function
 #' @param outer_method String of either `"cv"` or `"LOOCV"` specifying whether
 #'   to do k-fold CV or leave one out CV (LOOCV) for the outer folds
 #' @param n_outer_folds Number of outer CV folds
@@ -34,6 +39,9 @@
 #' @param keep Logical indicating whether inner CV predictions are retained for
 #'   calculating left-out inner CV fold accuracy etc. See argument `keep` in
 #'   [cv.glmnet].
+#' @param weights Weights applied to each sample. Note `weights` and `balance`
+#'   cannot be used at the same time. Weights are only applied in glmnet and not
+#'   in filters.
 #' @param penalty.factor Separate penalty factors can be applied to each
 #'   coefficient. Can be 0 for some variables, which implies no shrinkage, and
 #'   that variable is always included in the model. Default is 1 for all
@@ -74,6 +82,7 @@
 #' @importFrom glmnet cv.glmnet glmnet
 #' @importFrom parallel mclapply makeCluster clusterExport stopCluster parLapply
 #' @importFrom pROC roc
+#' @importFrom Rfast colmeans
 #' @importFrom stats predict setNames
 #' @examples
 #' 
@@ -129,6 +138,8 @@ nestcv.glmnet <- function(y, x,
                                      "multinomial", "cox", "mgaussian"),
                           filterFUN = NULL,
                           filter_options = NULL,
+                          balance = NULL,
+                          balance_options = NULL,
                           outer_method = c("cv", "LOOCV"),
                           n_outer_folds = 10,
                           n_inner_folds = 10,
@@ -136,6 +147,7 @@ nestcv.glmnet <- function(y, x,
                           alphaSet = seq(0, 1, 0.1),
                           min_1se = 0,
                           keep = TRUE,
+                          weights = NULL,
                           penalty.factor = rep(1, ncol(x)),
                           cv.cores = 1,
                           na.option = "omit",
@@ -144,9 +156,15 @@ nestcv.glmnet <- function(y, x,
   nestcv.call <- match.call(expand.dots = TRUE)
   outer_method <- match.arg(outer_method)
   x <- as.matrix(x)
+  if (is.null(colnames(x))) colnames(x) <- paste0("V", seq_len(ncol(x)))
   ok <- checkxy(y, x, na.option)
   y <- y[ok$r]
   x <- x[ok$r, ok$c]
+  if (!is.null(balance) & !is.null(weights)) {
+    stop("`balance` and `weights` cannot be used at the same time")}
+  if (!is.null(balance) & is.numeric(y)) {
+    stop("`balance` can only be used for classification")}
+  
   if (is.null(outer_folds)) {
     outer_folds <- switch(outer_method,
                           cv = createFolds(y, k = n_outer_folds),
@@ -157,20 +175,23 @@ nestcv.glmnet <- function(y, x,
     cl <- makeCluster(cv.cores)
     clusterExport(cl, varlist = c("outer_folds", "y", "x", "filterFUN",
                                   "filter_options", "alphaSet", "min_1se", 
-                                  "n_inner_folds", "keep", "family", 
+                                  "n_inner_folds", "keep", "family",
+                                  "weights", "balance", "balance_options",
                                   "penalty.factor", "nestcv.glmnetCore", ...),
                   envir = environment())
     outer_res <- parLapply(cl = cl, outer_folds, function(test) {
-      nestcv.glmnetCore(test, y, x, filterFUN, filter_options, 
+      nestcv.glmnetCore(test, y, x, filterFUN, filter_options,
+                        balance, balance_options,
                         alphaSet, min_1se, n_inner_folds, keep, family,
-                        penalty.factor, ...)
+                        weights, penalty.factor, ...)
     })
     stopCluster(cl)
   } else {
     outer_res <- mclapply(outer_folds, function(test) {
-      nestcv.glmnetCore(test, y, x, filterFUN, filter_options, 
+      nestcv.glmnetCore(test, y, x, filterFUN, filter_options,
+                        balance, balance_options,
                         alphaSet, min_1se, n_inner_folds, keep, family,
-                        penalty.factor, ...)
+                        weights, penalty.factor, ...)
     }, mc.cores = cv.cores)
   }
   
@@ -187,7 +208,7 @@ nestcv.glmnet <- function(y, x,
                            quiet = TRUE)
   }
   # fit final glmnet
-  lam <- mean(unlist(lapply(outer_res, '[[', 'lambda')))
+  lam <- exp(mean(log(unlist(lapply(outer_res, '[[', 'lambda')))))
   alph <- mean(unlist(lapply(outer_res, '[[', 'alpha')))
   final_param <- setNames(c(lam, alph), c("lambda", "alpha"))
   if (is.null(filterFUN)) {
@@ -202,6 +223,14 @@ nestcv.glmnet <- function(y, x,
   }
   fit <- glmnet(filtx, y, alpha = alph, family = family, 
                 penalty.factor = filtpen.factor, ...)
+  
+  fin_coef <- glmnet_coefs(fit, s = final_param["lambda"])
+  if (is.list(fin_coef)) {
+    final_coef <- fin_coef  # multinomial
+  } else {
+    cfmean <- colmeans(x[, names(fin_coef)[-1]])
+    final_coef <- data.frame(coef = fin_coef, meanExp = c(NA, cfmean))
+  }
   out <- list(call = nestcv.call,
               output = output,
               outer_result = outer_res,
@@ -209,8 +238,10 @@ nestcv.glmnet <- function(y, x,
               n_inner_folds = n_inner_folds,
               outer_folds = outer_folds,
               dimx = dim(x),
+              y = y,
               final_param = final_param,
               final_fit = fit,
+              final_coef = final_coef,
               roc = glmnet.roc,
               summary = summary)
   class(out) <- "nestcv.glmnet"
@@ -218,52 +249,51 @@ nestcv.glmnet <- function(y, x,
 }
 
 
-nestcv.glmnetCore <- function(test, y, x, filterFUN, filter_options, 
+nestcv.glmnetCore <- function(test, y, x, filterFUN, filter_options,
+                              balance, balance_options,
                               alphaSet, min_1se, n_inner_folds, keep, family,
-                              penalty.factor, ...) {
-  if (is.null(filterFUN)) {
-    filtx <- x
-    filtpen.factor <- penalty.factor
-  } else {
-    args <- list(y = y[-test], x = x[-test, ])
-    args <- append(args, filter_options)
-    fset <- do.call(filterFUN, args)
-    filtx <- x[, fset]
-    filtpen.factor <- penalty.factor[fset]
-  }
-  cvafit <- cva.glmnet(x = filtx[-test, ], y = y[-test], 
+                              weights, penalty.factor, ...) {
+  dat <- nest_filt_bal(test, y, x, filterFUN, filter_options,
+                       balance, balance_options, penalty.factor)
+  ytrain <- dat$ytrain
+  ytest <- dat$ytest
+  filt_xtrain <- dat$filt_xtrain
+  filt_xtest <- dat$filt_xtest
+  filt_pen.factor <- dat$filt_pen.factor
+  
+  cvafit <- cva.glmnet(x = filt_xtrain, y = ytrain, 
                        alphaSet = alphaSet, nfolds = n_inner_folds,
-                       keep = keep, family = family,
-                       penalty.factor = filtpen.factor, ...)
+                       keep = keep, family = family, weights = weights[-test],
+                       penalty.factor = filt_pen.factor, ...)
   alphafit <- cvafit$fits[[cvafit$which_alpha]]
   s <- exp((log(alphafit$lambda.min) * (1-min_1se) + log(alphafit$lambda.1se) * min_1se))
   cf <- glmnet_coefs(alphafit, s = s)
   # test on outer CV
-  predy <- as.vector(predict(alphafit, newx = filtx[test, ], s = s, type = "class"))
-  preds <- data.frame(testy=y[test], predy=predy)
+  predy <- as.vector(predict(alphafit, newx = filt_xtest, s = s, type = "class"))
+  preds <- data.frame(testy=ytest, predy=predy)
   if (family == "binomial") {
-    predyp <- as.vector(predict(alphafit, newx = filtx[test, ], s = s))
+    predyp <- as.vector(predict(alphafit, newx = filt_xtest, s = s))
     preds <- cbind(preds, predyp)
   } else if (family == "multinomial") {
     # glmnet generates 3d array
-    predyp <- predict(alphafit, newx = filtx[test, ], s = s)[,, 1]
+    predyp <- predict(alphafit, newx = filt_xtest, s = s)[,, 1]
     preds <- cbind(preds, predyp)
   }
-  rownames(preds) <- rownames(x)[test]
+  rownames(preds) <- rownames(filt_xtest)
   ret <- list(preds = preds,
               lambda = s,
               alpha = cvafit$best_alpha,
               coef = cf,
               cvafit = cvafit,
-              nfilter = ncol(filtx))
+              nfilter = ncol(filt_xtrain),
+              ytrain = ytrain)
   # inner CV predictions
   if (keep) {
     ind <- alphafit$index["min", ]
-    ytrain <- y[-test]
     innerCV_preds <- if (family == "multinomial") {
       alphafit$fit.preval[, , ind]
     } else alphafit$fit.preval[, ind]
-    ret <- append(ret, list(ytrain = ytrain, innerCV_preds = innerCV_preds))
+    ret <- append(ret, list(innerCV_preds = innerCV_preds))
   }
   ret
 }
@@ -289,14 +319,20 @@ nestcv.glmnetCore <- function(test, y, x, filterFUN, filter_options,
 #' @seealso [cv.glmnet], [glmnet]
 #' @author Myles Lewis
 #' @importFrom glmnet cv.glmnet
+#' @importFrom utils tail
 #' @export
 #' 
 cva.glmnet <- function(x, y, nfolds = 10, alphaSet = seq(0.1, 1, 0.1), ...) {
   foldid <- sample(rep(seq_len(nfolds), length = length(y)))
-  fits <- lapply(alphaSet, function(alpha) {
-    cv.glmnet(x = x, y = y, 
-              alpha = alpha, foldid = foldid, ...)
-  })
+  fit1 <- cv.glmnet(x = x, y = y, 
+                    alpha = tail(alphaSet, 1), foldid = foldid, ...)
+  if (length(alphaSet) > 1) {
+    fits <- lapply(alphaSet[1:(length(alphaSet)-1)], function(alpha) {
+      cv.glmnet(x = x, y = y, 
+                alpha = alpha, foldid = foldid, lambda = fit1$lambda, ...)
+    })
+    fits <- append(fits, list(fit1))
+  } else fits <- list(fit1)
   alpha_cvm <- unlist(lapply(fits, function(i) min(i$cvm)))
   which_alpha <- which.min(alpha_cvm)
   best_alpha <- alphaSet[which_alpha]
@@ -384,12 +420,20 @@ summary.nestcv.glmnet <- function(object, digits = max(3L, getOption("digits") -
                          cv = paste0(length(object$outer_folds), "-fold CV"),
                          LOOCV = "leave-one-out CV"))
   cat("\nInner loop: ", paste0(object$n_inner_folds, "-fold CV\n"))
-  cat(object$dimx[1], "observations,", object$dimx[2], "predictors\n\n")
+  balance <- object$call$balance
+  if (!is.null(balance)) {
+    cat("Balancing: ", balance, "\n")
+  }
+  cat(object$dimx[1], "observations,", object$dimx[2], "predictors\n")
+  if (!is.numeric(object$y)) print(c(table(object$y)))
+  cat("\n")
+  
   alpha <- unlist(lapply(object$outer_result, '[[', 'alpha'))
   lambda <- unlist(lapply(object$outer_result, '[[', 'lambda'))
   nfilter <- unlist(lapply(object$outer_result, '[[', 'nfilter'))
   foldres <- data.frame(alpha = alpha, lambda = lambda, n.filter = nfilter,
                         row.names = paste("Fold", seq_along(alpha)))
+  
   print(foldres, digits = digits)
   cat("\nFinal parameters:\n")
   print(object$final_param, digits = digits, print.gap = 2L)
@@ -456,29 +500,4 @@ predSummary <- function(output) {
     summary <- caret::defaultSummary(df)
   }
   summary
-}
-
-
-checkxy <- function(y, x, na.option) {
-  if (length(y) != nrow(x))
-    stop("Mismatch in length of 'y' and number of rows in 'x'", call. = FALSE)
-  nay <- is.na(y)
-  if (any(nay)) message("'y' contains ", sum(nay), " NA")
-  naxr <- !complete.cases(x)
-  naxc <- !complete.cases(t(x))
-  okr <- rep.int(TRUE, length(y))
-  okc <- rep.int(TRUE, ncol(x))
-  if (na.option == "omit") {
-    if (sum(naxr) == 1) {message("1 row in 'x' contains NA")
-    } else if (sum(naxr) > 1) message(sum(naxr), " rows in 'x' contain NA")
-    okr <- !nay & !naxr
-  } else {
-    if (sum(naxc) == 1) {message("1 column in 'x' contains NA")
-    } else if (sum(naxc) > 1) message(sum(naxc), " columns in 'x' contain NA")
-  }
-  if (na.option == "omitcol") {
-    okr <- !nay
-    okc <- !naxc
-  }
-  list(r = okr, c = okc)
 }

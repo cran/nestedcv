@@ -20,6 +20,11 @@
 #'   `outercv` is called with a formula.
 #' @param filter_options List of additional arguments passed to the filter
 #'   function specified by `filterFUN`.
+#' @param balance Specifies method for dealing with imbalanced class data.
+#'   Current options are `"randomsample"` or `"smote"`. Not available if
+#'   `outercv` is called with a formula. See [randomsample()] and [smote()]
+#' @param balance_options List of additional arguments passed to the balancing
+#'   function
 #' @param outer_method String of either `"cv"` or `"LOOCV"` specifying whether
 #'   to do k-fold CV or leave one out CV (LOOCV) for the outer folds
 #' @param n_outer_folds Number of outer CV folds
@@ -54,6 +59,7 @@
 #'   \item{outer_folds}{List of indices of outer test folds}
 #'   \item{final_fit}{Final fitted model on whole data}
 #'   \item{final_vars}{Column names of filtered predictors entering final model}
+#'   \item{summary_vars}{Summary statistics of filtered predictors}
 #'   \item{roc}{ROC AUC for binary classification where available.}
 #'   \item{summary}{Overall performance summary. Accuracy and balanced accuracy
 #'   for classification. ROC AUC for binary classification. RMSE for
@@ -151,6 +157,8 @@ outercv.default <- function(y, x,
                             model,
                             filterFUN = NULL,
                             filter_options = NULL,
+                            balance = NULL,
+                            balance_options = NULL,
                             outer_method = c("cv", "LOOCV"),
                             n_outer_folds = 10,
                             outer_folds = NULL,
@@ -163,6 +171,8 @@ outercv.default <- function(y, x,
   y <- y[ok$r]
   x <- x[ok$r, ok$c]
   reg <- !(is.factor(y) | is.character(y))  # y = regression
+  if (!is.null(balance) & reg) {
+    stop("`balance` can only be used for classification")}
   outer_method <- match.arg(outer_method)
   if (is.null(outer_folds)) {
     outer_folds <- switch(outer_method,
@@ -175,17 +185,20 @@ outercv.default <- function(y, x,
     cl <- makeCluster(cv.cores)
     clusterExport(cl, varlist = c("outer_folds", "y", "x", "model", "reg",
                                   "filterFUN", "filter_options",
+                                  "balance", "balance_options",
                                   "predict_type", "outercvCore", ...),
                   envir = environment())
     outer_res <- parLapply(cl = cl, outer_folds, function(test) {
       outercvCore(test, y, x, model, reg,
-                  filterFUN, filter_options, predict_type, ...)
+                  filterFUN, filter_options,
+                  balance, balance_options, predict_type, ...)
     })
     stopCluster(cl)
   } else {
     outer_res <- mclapply(outer_folds, function(test) {
       outercvCore(test, y, x, model, reg,
-                  filterFUN, filter_options, predict_type, ...)
+                  filterFUN, filter_options,
+                  balance, balance_options, predict_type, ...)
     }, mc.cores = cv.cores)
   }
   
@@ -226,8 +239,10 @@ outercv.default <- function(y, x,
               outer_method = outer_method,
               outer_folds = outer_folds,
               dimx = dim(x),
+              y = y,
               final_fit = fit,
               final_vars = colnames(filtx),
+              summary_vars = summary_vars(filtx),
               roc = fit.roc,
               summary = summary)
   class(out) <- "outercv"
@@ -236,35 +251,38 @@ outercv.default <- function(y, x,
 
 
 outercvCore <- function(test, y, x, model, reg,
-                        filterFUN, filter_options, predict_type, ...) {
-  filtx <- if (is.null(filterFUN)) x else {
-    args <- list(y = y[-test], x = x[-test, ])
-    args <- append(args, filter_options)
-    fset <- do.call(filterFUN, args)
-    x[, fset]
-  }
+                        filterFUN, filter_options,
+                        balance, balance_options, predict_type, ...) {
+  dat <- nest_filt_bal(test, y, x, filterFUN, filter_options,
+                       balance, balance_options)
+  ytrain <- dat$ytrain
+  ytest <- dat$ytest
+  filt_xtrain <- dat$filt_xtrain
+  filt_xtest <- dat$filt_xtest
+  
   # check if model uses formula
   if ("formula" %in% formalArgs(model)) {
-    dat <- if (is.data.frame(filtx)) {filtx[-test, ]
-    } else as.data.frame(filtx[-test, ], stringsAsFactors = TRUE)
-    dat$.outcome <- y[-test]
+    dat <- if (is.data.frame(filt_xtrain)) {filt_xtrain
+    } else as.data.frame(filt_xtrain, stringsAsFactors = TRUE)
+    dat$.outcome <- ytrain
     fit <- model(as.formula(".outcome ~ ."), data = dat, ...)
   } else {
-    fit <- model(y = y[-test], x = filtx[-test, ], ...)
+    fit <- model(y = ytrain, x = filt_xtrain, ...)
   }
   # test on outer CV
-  predy <- predict(fit, newdata = filtx[test, ])
-  preds <- data.frame(predy=predy, testy=y[test])
+  predy <- predict(fit, newdata = filt_xtest)
+  preds <- data.frame(predy=predy, testy=ytest)
   # for AUC
   if (!reg & nlevels(y) == 2) {
-    predyp <- predict(fit, newdata = filtx[test, ], type = predict_type)
+    predyp <- predict(fit, newdata = filt_xtest, type = predict_type)
     if (!is.vector(predyp)) predyp <- predyp[,2]
     preds$predyp <- predyp
   }
-  rownames(preds) <- rownames(x)[test]
+  rownames(preds) <- rownames(filt_xtest)
   list(preds = preds,
        fit = fit,
-       nfilter = ncol(filtx))
+       nfilter = ncol(filt_xtest),
+       ytrain = ytrain)
 }
 
 
@@ -354,6 +372,8 @@ outercv.formula <- function(formula, data,
               outer_folds = outer_folds,
               dimx = c(nrow(data), length(labels(terms(fit)))),
               final_fit = fit,
+              y = y,
+              summary_vars = summary_vars(data),
               roc = fit.roc,
               summary = summary)
   class(out) <- "outercv"
@@ -388,7 +408,14 @@ summary.outercv <- function(object,
                              cv = paste0(length(object$outer_folds), "-fold CV"),
                              LOOCV = "leave-one-out CV"))
   cat("\nNo inner loop\n")
+  balance <- object$call$balance
+  if (!is.null(balance)) {
+    cat("Balancing: ", balance, "\n")
+  }
   cat(object$dimx[1], "observations,", object$dimx[2], "predictors\n")
+  if (!is.numeric(object$y)) print(c(table(object$y)))
+  cat("\n")
+  
   cat("Model: ", object$call$model, "\n")
   if (!is.null(object$call$filterFUN)) {
     cat("Filter: ", object$call$filterFUN, "\n")

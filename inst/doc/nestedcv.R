@@ -7,7 +7,7 @@ library(nestedcv)
 library(pROC)
 
 ## ----eval = FALSE-------------------------------------------------------------
-#  devtools::install_github("myles-lewis/nestedcv", auth_token = "API token...")
+#  install.packages("nestedcv")
 #  library(nestedcv)
 
 ## -----------------------------------------------------------------------------
@@ -65,8 +65,8 @@ knitr::include_graphics("fig2.svg")
 #  # set up data
 #  load("/../R4RA_270821.RData")
 #  
-#  index <- r4ra.meta$Outliers_Detected_On_PCA != "outlier" & r4ra.meta$Visit == 3
-#            & !is.na(r4ra.meta$Visit)
+#  index <- r4ra.meta$Outliers_Detected_On_PCA != "outlier" & r4ra.meta$Visit == 3 &
+#            !is.na(r4ra.meta$Visit)
 #  metadata <- r4ra.meta[index, ]
 #  dim(metadata)  # 133 individuals
 #  
@@ -160,6 +160,9 @@ knitr::include_graphics("boxplot.png")
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  filter <- function(y, x, ...) {}
+
+## ----eval = FALSE-------------------------------------------------------------
+#  balance <- function(y, x, ...) {}
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  # nested CV using caret

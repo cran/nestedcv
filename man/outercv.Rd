@@ -14,6 +14,8 @@ outercv(y, ...)
   model,
   filterFUN = NULL,
   filter_options = NULL,
+  balance = NULL,
+  balance_options = NULL,
   outer_method = c("cv", "LOOCV"),
   n_outer_folds = 10,
   outer_folds = NULL,
@@ -52,6 +54,13 @@ character vector with names of filtered predictors. Not available if
 
 \item{filter_options}{List of additional arguments passed to the filter
 function specified by \code{filterFUN}.}
+
+\item{balance}{Specifies method for dealing with imbalanced class data.
+Current options are \code{"randomsample"} or \code{"smote"}. Not available if
+\code{outercv} is called with a formula. See \code{\link[=randomsample]{randomsample()}} and \code{\link[=smote]{smote()}}}
+
+\item{balance_options}{List of additional arguments passed to the balancing
+function}
 
 \item{outer_method}{String of either \code{"cv"} or \code{"LOOCV"} specifying whether
 to do k-fold CV or leave one out CV (LOOCV) for the outer folds}
@@ -98,6 +107,7 @@ predictors at each fold.}
 \item{outer_folds}{List of indices of outer test folds}
 \item{final_fit}{Final fitted model on whole data}
 \item{final_vars}{Column names of filtered predictors entering final model}
+\item{summary_vars}{Summary statistics of filtered predictors}
 \item{roc}{ROC AUC for binary classification where available.}
 \item{summary}{Overall performance summary. Accuracy and balanced accuracy
 for classification. ROC AUC for binary classification. RMSE for

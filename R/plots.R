@@ -117,12 +117,14 @@ plot_lambdas <- function(x,
 #' @param x Object of class 'cva.glmnet'
 #' @param xaxis String specifying what is plotted on the x axis, either log
 #'   lambda, alpha or the number of non-zero coefficients.
-#' @param errorBar Logical whether to show error bars for the standard deviation
-#'   of model deviance. Error bars are interleaved to avoid overlap.
+#' @param errorBar Logical whether to control error bars for the standard
+#'   deviation of model deviance when `xaxis = 'lambda'`. Because of overlapping
+#'   lines, only the deviance of the top and bottom points at a given lambda are
+#'   shown.
 #' @param errorWidth Width of error bars.
 #' @param min.pch Plotting 'character' for the minimum point of each curve. Not
 #'   shown if set to `NULL`. See [points]
-#' @param scheme Colour scheme
+#' @param scheme Colour scheme. Overrides the `palette` argument.
 #' @param palette Palette name (one of `hcl.pals()`) which is passed to
 #'   [hcl.colors]
 #' @param showLegend Either a keyword to position the legend or `NULL` to hide
@@ -134,12 +136,13 @@ plot_lambdas <- function(x,
 #' @author Myles Lewis
 #' @importFrom graphics lines legend par
 #' @importFrom grDevices hcl.colors
+#' @importFrom Rfast rowMaxs rowMins
 #' @export
 #' 
 plot.cva.glmnet <- function(x,
                             xaxis = c('lambda', 'alpha', 'nvar'),
                             errorBar = (xaxis == "alpha"),
-                            errorWidth = 0.01,
+                            errorWidth = 0.015,
                             min.pch = NULL,
                             scheme = NULL,
                             palette = "zissou",
@@ -169,21 +172,37 @@ plot.cva.glmnet <- function(x,
   }
   cvms <- lapply(x$fits, function(i) i$cvm)
   n <- length(cvms)
-  if (is.null(scheme)) scheme <- hcl.colors(n, palette)
+  if (is.null(scheme)) {
+    scheme <- if (n > 1) hcl.colors(n, palette) else "royalblue"
+  } else scheme <- rep_len(scheme, length(x$fits))
   px <- switch(xaxis,
                lambda = lapply(x$fits, function(i) log(i$lambda)),
                nvar = lapply(x$fits, function(i) i$nzero))
   ylim <- range(unlist(cvms))
   if (errorBar) {
-    cvlo <- lapply(x$fits, function(i) i$cvlo)
-    cvup <- lapply(x$fits, function(i) i$cvup)
-    ylim <- range(c(unlist(cvlo), unlist(cvup)))
+    ms <- do.call(cbind, cvms)
+    xs <- do.call(cbind, px)
+    whichup <- Rfast::rowMaxs(ms)
+    whichlo <- Rfast::rowMins(ms)
+    ups <- lapply(x$fits, function(i) i$cvup)
+    ups <- do.call(cbind, ups)
+    los <- lapply(x$fits, function(i) i$cvlo)
+    los <- do.call(cbind, los)
+    cvlo1 <- selectCol(ms, whichlo)
+    cvlo2 <- selectCol(los, whichlo)
+    cvlox <- selectCol(xs, whichlo)
+    cvup1 <- selectCol(ms, whichup)
+    cvup2 <- selectCol(ups, whichup)
+    cvupx <- selectCol(xs, whichup)
+    ylim <- range(c(unlist(cvlo2), unlist(cvup2)))
   }
   type <- switch(xaxis,
                 lambda = 'l',
                 nvar = 'p')
+  if (xaxis == 'nvar') errorBar <- FALSE
+  if (errorBar) type <- 'p'
   cex <- switch(xaxis,
-               lambda = 0.5,
+               lambda = 0.6,
                nvar = 0.8)
   plot.args <- list(y = cvms[[1]], x = px[[1]],
                     type = type,
@@ -196,25 +215,23 @@ plot.cva.glmnet <- function(x,
                     cex = cex,
                     col = scheme[1])
   if (length(new.args)) plot.args[names(new.args)] <- new.args
+  if (plot.args$type == 'l') errorBar <- FALSE
   do.call("plot", plot.args)
   if (errorBar) {
-    ind <- seq(1, length(cvms[[1]]), 10)
-    for (i in 1:n) {
-      arrows(px[[i]][ind], cvlo[[i]][ind], px[[i]][ind], cvup[[i]][ind],
-             length = errorWidth, angle = 90, code = 3, col = scheme[i])
-    }
+    arrows(cvlox, cvlo1, cvlox, cvlo2,
+           length = errorWidth, angle = 90, col = scheme[whichlo])
+    arrows(cvupx, cvup1, cvupx, cvup2,
+           length = errorWidth, angle = 90, col = scheme[whichup])
+    points(y = cvms[[1]], x = px[[1]],
+           cex = cex, pch = 21, col = scheme[1], bg = 'white')
   }
-  for (i in 2:n) {
-    lines.args <- list(y = cvms[[i]], x = px[[i]], col = scheme[i],
-                       type = type,
-                       cex = cex)
-    if (length(new.args)) lines.args[names(new.args)] <- new.args
-    do.call("lines", lines.args)
-  }
-  if (errorBar) {
-    for (i in 1:n) {
-      points(px[[i]][ind], cvms[[i]][ind], pch = 19, col = scheme[i],
-             cex = lines.args$cex)
+  if (n >= 2) {
+    for (i in 2:n) {
+      lines.args <- list(y = cvms[[i]], x = px[[i]], col = scheme[i],
+                         type = type,
+                         cex = cex, pch = 21, bg = 'white')
+      if (length(new.args)) lines.args[names(new.args)] <- new.args
+      do.call("lines", lines.args)
     }
   }
   # show minima
@@ -229,14 +246,20 @@ plot.cva.glmnet <- function(x,
       legend.pch <- if (is.null(plot.args$pch)) par("pch") else plot.args$pch
       legend(showLegend, bty = 'n',
              legend = parse(text = paste("alpha ==", x$alphaSet)),
-             col = scheme, pch = legend.pch)
+             col = scheme, pch = legend.pch, cex = 0.9)
     } else {
       legend.lwd <- if (is.null(plot.args$lwd)) par("lwd") else plot.args$lwd
       legend(showLegend, bty = 'n',
              legend = parse(text = paste("alpha ==", x$alphaSet)),
-             col = scheme, lty = 1, lwd = legend.lwd)
+             col = scheme, lty = 1, lwd = legend.lwd, cex = 0.9)
     }
   }
+}
+
+
+selectCol <- function(x, colIndex) {
+  out <- lapply(seq_along(colIndex), function(i) x[i, colIndex[i]])
+  unlist(out)
 }
 
 
@@ -282,6 +305,43 @@ boxplot_model <- function(x, data,
   if (length(new.args)) plot.args[names(new.args)] <- new.args
   do.call("boxplot", plot.args)
 }
+
+
+#' Variable importance plot
+#' 
+#' Plot of variable importance of coefficients of a final fitted
+#' 'nestedcv.glmnet' model using ggplot2. Mean expression can be overlaid as the
+#' size of points as this can be informative in models of biological attributes.
+#' 
+#' @param x a 'nestcv.glmnet' class object
+#' @param abs Logical whether to show absolute value of glmnet coefficients
+#' @param size Logical whether to show mean expression by size of points
+#' @return Returns a ggplot2 plot
+#' @importFrom ggplot2 ggplot geom_point scale_fill_viridis_c scale_y_discrete
+#'   xlab ylab theme_minimal aes theme element_text geom_col
+#' @importFrom rlang .data
+#' @export
+#' 
+plot_varImp <- function(x, abs = TRUE, size = TRUE) {
+  if (!inherits(x, "nestcv.glmnet")) stop("Not a 'nestcv.glmnet' class object")
+  df <- x$final_coef[-1,]
+  if (abs) df[, 'coef'] <- abs(df[, 'coef'])
+  df$name <- factor(rownames(df), levels = rownames(df))
+  p <- if (size) {
+    ggplot(df, aes(x = .data$coef, y = .data$name, size = .data$meanExp,
+                   fill = .data$meanExp)) +
+      geom_point(shape = 21, alpha = 0.7) +
+      scale_fill_viridis_c(guide = "legend")
+  } else {
+    ggplot(df, aes(x = .data$coef, y = .data$name)) +
+      geom_col()
+  }
+  p + scale_y_discrete(limits=rev) + ylab("") +
+    xlab("Variable importance") +
+    theme_minimal() +
+    theme(axis.text = element_text(colour = "black"))
+}
+
 
 #' Plot caret tuning
 #' 

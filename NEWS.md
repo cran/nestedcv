@@ -1,6 +1,26 @@
 News
 =====
 
+# nestedcv 0.3.0
+###### 07/09/2022
+* Add `randomsample()` to handle class imbalance using random over/undersampling
+* Add `smote()` for SMOTE algorithm for increasing minority class data
+* Add bootstrap wrapper to filters, e.g. `boot_ttest()`
+
+# nestedcv 0.2.6
+###### 02/09/2022
+* Final lambda in `nestcv.glmnet()` is mean of best lambdas on log scale
+* Added `plot_varImp` for plotting variable importance for `nestcv.glmnet` final
+models
+
+# nestedcv 0.2.4
+###### 19/07/2022
+* Corrected handling of multinomial models in `nestcv.glmnet()`
+* Align lambda in `cva.glmnet()`
+* Improve plotting of error bars in `plot.cva.glmnet`
+* Bugfix: plot of single `alphaSet` in `plot.cva.glmnet`
+* Updated documentation and vignette
+
 # nestedcv 0.2.1
 ###### 15/06/2022
 
