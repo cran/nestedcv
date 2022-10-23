@@ -13,7 +13,8 @@
 #' nested CV.
 #'
 #' @param y Response vector
-#' @param x Matrix of predictors. Dataframes will be coerced to a matrix.
+#' @param x Matrix of predictors. Dataframes will be coerced to a matrix as
+#'   is necessary for glmnet.
 #' @param family Either a character string representing one of the built-in
 #'   families, or else a `glm()` family object. Passed to [cv.glmnet] and
 #'   [glmnet]
@@ -49,6 +50,10 @@
 #' @param cv.cores Number of cores for parallel processing of the outer loops.
 #'   NOTE: this uses `parallel::mclapply` on unix/mac and `parallel::parLapply`
 #'   on windows.
+#' @param finalCV Logical whether to perform one last round of CV on the whole
+#'   dataset to determine the final model parameters. If set to `FALSE`, the
+#'   median of hyperparameters from outer CV folds are used for the final model.
+#'   Performance metrics are independent of this last step.
 #' @param na.option Character value specifying how `NA`s are dealt with.
 #'   `"omit"` (the default) is equivalent to `na.action = na.omit`. `"omitcol"`
 #'   removes cases if there are `NA` in 'y', but columns (predictors) containing
@@ -66,9 +71,12 @@
 #'   \item{n_inner_folds}{number of inner folds}
 #'   \item{outer_folds}{List of indices of outer test folds}
 #'   \item{dimx}{dimensions of `x`}
+#'   \item{y}{original response vector}
+#'   \item{yfinal}{final response vector (post-balancing)}
 #'   \item{final_param}{Final mean best lambda
 #'   and alpha from each fold}
 #'   \item{final_fit}{Final fitted glmnet model}
+#'   \item{final_coef}{Final model coefficients and mean expression}
 #'   \item{roc}{ROC AUC for binary classification where available.}
 #'   \item{summary}{Overall performance summary. Accuracy and balanced accuracy
 #'   for classification. ROC AUC for binary classification. RMSE for
@@ -150,6 +158,7 @@ nestcv.glmnet <- function(y, x,
                           weights = NULL,
                           penalty.factor = rep(1, ncol(x)),
                           cv.cores = 1,
+                          finalCV = TRUE,
                           na.option = "omit",
                           ...) {
   family <- match.arg(family)
@@ -157,9 +166,10 @@ nestcv.glmnet <- function(y, x,
   outer_method <- match.arg(outer_method)
   x <- as.matrix(x)
   if (is.null(colnames(x))) colnames(x) <- paste0("V", seq_len(ncol(x)))
-  ok <- checkxy(y, x, na.option)
+  ok <- checkxy(y, x, na.option, weights)
   y <- y[ok$r]
   x <- x[ok$r, ok$c]
+  weights <- weights[ok$r]
   if (!is.null(balance) & !is.null(weights)) {
     stop("`balance` and `weights` cannot be used at the same time")}
   if (!is.null(balance) & is.numeric(y)) {
@@ -173,19 +183,22 @@ nestcv.glmnet <- function(y, x,
   
   if (Sys.info()["sysname"] == "Windows" & cv.cores >= 2) {
     cl <- makeCluster(cv.cores)
-    clusterExport(cl, varlist = c("outer_folds", "y", "x", "filterFUN",
-                                  "filter_options", "alphaSet", "min_1se", 
-                                  "n_inner_folds", "keep", "family",
-                                  "weights", "balance", "balance_options",
-                                  "penalty.factor", "nestcv.glmnetCore", ...),
-                  envir = environment())
+    dots <- list(...)
+    varlist = c("outer_folds", "y", "x", "filterFUN", "filter_options",
+                "alphaSet", "min_1se",  "n_inner_folds", "keep", "family",
+                "weights", "balance", "balance_options", "penalty.factor",
+                "nestcv.glmnetCore", "dots")
+    clusterExport(cl, varlist = varlist, envir = environment())
+    on.exit(stopCluster(cl))
     outer_res <- parLapply(cl = cl, outer_folds, function(test) {
-      nestcv.glmnetCore(test, y, x, filterFUN, filter_options,
-                        balance, balance_options,
-                        alphaSet, min_1se, n_inner_folds, keep, family,
-                        weights, penalty.factor, ...)
+      args <- c(list(test=test, y=y, x=x, filterFUN=filterFUN,
+                     filter_options=filter_options,
+                     balance=balance, balance_options=balance_options,
+                     alphaSet=alphaSet, min_1se=min_1se,
+                     n_inner_folds=n_inner_folds, keep=keep, family=family,
+                     weights=weights, penalty.factor=penalty.factor), dots)
+      do.call(nestcv.glmnetCore, args)
     })
-    stopCluster(cl)
   } else {
     outer_res <- mclapply(outer_folds, function(test) {
       nestcv.glmnetCore(test, y, x, filterFUN, filter_options,
@@ -207,22 +220,29 @@ nestcv.glmnet <- function(y, x,
     glmnet.roc <- pROC::roc(output$testy, output$predyp, direction = "<", 
                            quiet = TRUE)
   }
-  # fit final glmnet
-  lam <- exp(mean(log(unlist(lapply(outer_res, '[[', 'lambda')))))
-  alph <- mean(unlist(lapply(outer_res, '[[', 'alpha')))
-  final_param <- setNames(c(lam, alph), c("lambda", "alpha"))
-  if (is.null(filterFUN)) {
-    filtx <- x
-    filtpen.factor <- penalty.factor
+  dat <- nest_filt_bal(NULL, y, x, filterFUN, filter_options,
+                       balance, balance_options,
+                       penalty.factor = penalty.factor)
+  yfinal <- dat$ytrain
+  filtx <- dat$filt_xtrain
+  filtpen.factor <- dat$filt_pen.factor
+  
+  if (finalCV) {
+    # use CV on whole data to finalise parameters
+    cvafit <- cva.glmnet(filtx, yfinal, alphaSet = alphaSet, family = family,
+                         weights = weights, penalty.factor = filtpen.factor, ...)
+    alphafit <- cvafit$fits[[cvafit$which_alpha]]
+    s <- exp((log(alphafit$lambda.min) * (1-min_1se) + log(alphafit$lambda.1se) * min_1se))
+    fit <- cvafit$fits[[cvafit$which_alpha]]
+    final_param <- setNames(c(s, cvafit$best_alpha), c("lambda", "alpha"))
   } else {
-    args <- list(y = y, x = x)
-    args <- append(args, filter_options)
-    fset <- do.call(filterFUN, args)
-    filtx <- x[, fset]
-    filtpen.factor <- penalty.factor[fset]
+    # use outer folds for final parameters
+    lam <- exp(median(log(unlist(lapply(outer_res, '[[', 'lambda')))))
+    alph <- median(unlist(lapply(outer_res, '[[', 'alpha')))
+    final_param <- setNames(c(lam, alph), c("lambda", "alpha"))
+    fit <- glmnet(filtx, yfinal, alpha = alph, family = family, 
+                  weights = weights, penalty.factor = filtpen.factor, ...)
   }
-  fit <- glmnet(filtx, y, alpha = alph, family = family, 
-                penalty.factor = filtpen.factor, ...)
   
   fin_coef <- glmnet_coefs(fit, s = final_param["lambda"])
   if (is.list(fin_coef)) {
@@ -239,6 +259,7 @@ nestcv.glmnet <- function(y, x,
               outer_folds = outer_folds,
               dimx = dim(x),
               y = y,
+              yfinal = yfinal,
               final_param = final_param,
               final_fit = fit,
               final_coef = final_coef,

@@ -9,6 +9,7 @@ nestcv.train(
   x,
   filterFUN = NULL,
   filter_options = NULL,
+  weights = NULL,
   balance = NULL,
   balance_options = NULL,
   outer_method = c("cv", "LOOCV"),
@@ -19,6 +20,7 @@ nestcv.train(
   trControl = NULL,
   tuneGrid = NULL,
   savePredictions = "final",
+  finalCV = TRUE,
   na.option = "pass",
   ...
 )
@@ -34,6 +36,10 @@ character vector with names of filtered predictors.}
 
 \item{filter_options}{List of additional arguments passed to the filter
 function specified by \code{filterFUN}.}
+
+\item{weights}{Weights applied to each sample for models which can use
+weights. Note \code{weights} and \code{balance} cannot be used at the same time.
+Weights are not applied in filters.}
 
 \item{balance}{Specifies method for dealing with imbalanced class data.
 Current options are \code{"randomsample"} or \code{"smote"}. See \code{\link[=randomsample]{randomsample()}} and
@@ -71,6 +77,13 @@ CV fold should be saved for ROC curves, accuracy etc see
 \link[caret:trainControl]{caret::trainControl}. Default is \code{"final"} to capture predictions for
 inner CV ROC.}
 
+\item{finalCV}{Logical whether to perform one last round of CV on the whole
+dataset to determine the final model parameters. If set to \code{FALSE}, the
+median of the best hyperparameters from outer CV folds for continuous/
+ordinal hyperparameters, or highest voted for categorical hyperparameters,
+are used to fit the final model. Performance metrics are independent of
+this last step.}
+
 \item{na.option}{Character value specifying how \code{NA}s are dealt with.
 \code{"omit"} is equivalent to \code{na.action = na.omit}. \code{"omitcol"} removes cases
 if there are \code{NA} in 'y', but columns (predictors) containing \code{NA} are
@@ -86,8 +99,10 @@ An object with S3 class "nestcv.train"
 \item{outer_result}{List object of results from each outer fold containing
 predictions on left-out outer folds, caret result and number of filtered
 predictors at each fold.}
-\item{dimx}{dimensions of \code{x}}
 \item{outer_folds}{List of indices of outer test folds}
+\item{dimx}{dimensions of \code{x}}
+\item{y}{original response vector}
+\item{yfinal}{final response vector (post-balancing)}
 \item{final_fit}{Final fitted caret model using best tune parameters}
 \item{final_vars}{Column names of filtered predictors entering final model}
 \item{summary_vars}{Summary statistics of filtered predictors}
@@ -107,8 +122,20 @@ CV. Predictions on the outer test folds are brought back together and error
 estimation/ accuracy determined. The default is 10x10 nested CV.
 }
 \details{
-Parallelisation is performed on the outer folds using \code{mclapply}.
-For classification \code{metric} defaults to using 'logLoss' with the
+Parallelisation is performed on the outer folds using \code{parallel::mclapply} on
+unix/mac and \code{parallel::parLapply} on windows.
+
+We strongly recommend that you try calls to \code{nestcv.train} with \code{cv.cores=1}
+first. With \code{caret} this may flag up that specific packages are not installed
+or that there are problems with input variables \code{y} and \code{x} which may have to
+be corrected for the call to run in multicore mode.
+
+If the outer folds are run using parallelisation, then parallelisation in
+caret must be off, otherwise an error will be generated. Alternatively if
+you wish to use parallelisation in caret, then parallelisation in
+\code{nestcv.train} can be fully disabled by leaving \code{cv.cores = 1}.
+
+For classification, \code{metric} defaults to using 'logLoss' with the
 \code{trControl} arguments \verb{classProbs = TRUE, summaryFunction = mnLogLoss},
 rather than 'Accuracy' which is the default classification metric in
 \code{caret}. See \link{trainControl}. LogLoss is arguably more consistent than

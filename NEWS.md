@@ -1,6 +1,27 @@
 News
 =====
 
+# nestedcv 0.4.0
+###### 28/09/2022
+* Add support for nested CV on ensemble models from `SuperLearner` package
+* Final CV on whole data is now the default in `nestcv.train` and
+`nestcv.glmnet`
+
+# nestedcv 0.3.6
+###### 18/09/2022
+* Fix windows parallelisation bugs
+
+# nestedcv 0.3.5
+###### 16/09/2022
+* Fix bug in `nestcv.train` for caret models with tuning parameters which are
+factors
+* Fix bug in `nestcv.train` for caret models using regression
+* Add option in `nestcv.train` and `nestcv.glmnet` to tune final model
+parameters using a final round of CV on the whole dataset
+* Fix bugs in LOOCV
+* Add balancing to final model fitting
+* Add case weights to `nestcv.train` and `outercv`
+
 # nestedcv 0.3.0
 ###### 07/09/2022
 * Add `randomsample()` to handle class imbalance using random over/undersampling

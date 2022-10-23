@@ -22,6 +22,7 @@ nestcv.glmnet(
   weights = NULL,
   penalty.factor = rep(1, ncol(x)),
   cv.cores = 1,
+  finalCV = TRUE,
   na.option = "omit",
   ...
 )
@@ -29,7 +30,8 @@ nestcv.glmnet(
 \arguments{
 \item{y}{Response vector}
 
-\item{x}{Matrix of predictors. Dataframes will be coerced to a matrix.}
+\item{x}{Matrix of predictors. Dataframes will be coerced to a matrix as
+is necessary for glmnet.}
 
 \item{family}{Either a character string representing one of the built-in
 families, or else a \code{glm()} family object. Passed to \link{cv.glmnet} and
@@ -81,6 +83,11 @@ variables. See \link{glmnet}}
 NOTE: this uses \code{parallel::mclapply} on unix/mac and \code{parallel::parLapply}
 on windows.}
 
+\item{finalCV}{Logical whether to perform one last round of CV on the whole
+dataset to determine the final model parameters. If set to \code{FALSE}, the
+median of hyperparameters from outer CV folds are used for the final model.
+Performance metrics are independent of this last step.}
+
 \item{na.option}{Character value specifying how \code{NA}s are dealt with.
 \code{"omit"} (the default) is equivalent to \code{na.action = na.omit}. \code{"omitcol"}
 removes cases if there are \code{NA} in 'y', but columns (predictors) containing
@@ -101,9 +108,12 @@ predictors at each fold.}
 \item{n_inner_folds}{number of inner folds}
 \item{outer_folds}{List of indices of outer test folds}
 \item{dimx}{dimensions of \code{x}}
+\item{y}{original response vector}
+\item{yfinal}{final response vector (post-balancing)}
 \item{final_param}{Final mean best lambda
 and alpha from each fold}
 \item{final_fit}{Final fitted glmnet model}
+\item{final_coef}{Final model coefficients and mean expression}
 \item{roc}{ROC AUC for binary classification where available.}
 \item{summary}{Overall performance summary. Accuracy and balanced accuracy
 for classification. ROC AUC for binary classification. RMSE for

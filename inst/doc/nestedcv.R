@@ -162,7 +162,10 @@ knitr::include_graphics("boxplot.png")
 #  filter <- function(y, x, ...) {}
 
 ## ----eval = FALSE-------------------------------------------------------------
-#  balance <- function(y, x, ...) {}
+#  balance <- function(y, x, ...) {
+#  
+#    return(list(y = y, x = x))
+#  }
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  # nested CV using caret
@@ -296,4 +299,10 @@ summary(res.cv.hsstan)
 sampler.stats(res.cv.hsstan$final_fit)
 print(projsel(res.cv.hsstan$final_fit), digits = 4)  # adding marker2
 options(oldopt)  # reset options
+
+## ----eval = FALSE-------------------------------------------------------------
+#  parallel::detectCores(logical = FALSE)
+
+## ----eval = FALSE-------------------------------------------------------------
+#  set.seed(123, "L'Ecuyer-CMRG")
 

@@ -14,6 +14,7 @@ outercv(y, ...)
   model,
   filterFUN = NULL,
   filter_options = NULL,
+  weights = NULL,
   balance = NULL,
   balance_options = NULL,
   outer_method = c("cv", "LOOCV"),
@@ -22,6 +23,7 @@ outercv(y, ...)
   cv.cores = 1,
   predict_type = "prob",
   na.option = "pass",
+  returnList = FALSE,
   ...
 )
 
@@ -55,6 +57,10 @@ character vector with names of filtered predictors. Not available if
 \item{filter_options}{List of additional arguments passed to the filter
 function specified by \code{filterFUN}.}
 
+\item{weights}{Weights applied to each sample for models which can use
+weights. Note \code{weights} and \code{balance} cannot be used at the same time.
+Weights are not applied in filters.}
+
 \item{balance}{Specifies method for dealing with imbalanced class data.
 Current options are \code{"randomsample"} or \code{"smote"}. Not available if
 \code{outercv} is called with a formula. See \code{\link[=randomsample]{randomsample()}} and \code{\link[=smote]{smote()}}}
@@ -85,6 +91,9 @@ to \code{predict()} via \code{predict_type}.}
 if there are \code{NA} in 'y', but columns (predictors) containing \code{NA} are
 removed from 'x' to preserve cases. Any other value means that \code{NA} are
 ignored (a message is given).}
+
+\item{returnList}{Logical whether to return list of results after main outer
+CV loop without concatenating results. Useful for debugging.}
 
 \item{formula}{A formula describing the model to be fitted}
 
@@ -136,6 +145,10 @@ An alternative method of tuning a single model with fixed parameters
 is to use \link{nestcv.train} with \code{tuneGrid} set as a single row of a
 data.frame. The parameters which are needed for a specific model can be
 identified using \code{\link[caret:modelLookup]{caret::modelLookup()}}.
+
+Case weights can be passed to model function which accept these, however
+\code{outercv} assumes that these are passed to the model via an argument named
+\code{weights}.
 
 Note that in the case of \code{model = lm}, although additional arguments e.g.
 \code{subset}, \code{weights}, \code{offset} are passed into the model function via

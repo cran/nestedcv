@@ -20,6 +20,9 @@
 #'   `outercv` is called with a formula.
 #' @param filter_options List of additional arguments passed to the filter
 #'   function specified by `filterFUN`.
+#' @param weights Weights applied to each sample for models which can use
+#'   weights. Note `weights` and `balance` cannot be used at the same time.
+#'   Weights are not applied in filters.
 #' @param balance Specifies method for dealing with imbalanced class data.
 #'   Current options are `"randomsample"` or `"smote"`. Not available if
 #'   `outercv` is called with a formula. See [randomsample()] and [smote()]
@@ -38,6 +41,8 @@
 #'   functions use syntax of the form `predict(..., type = "prob")`. However,
 #'   some models require a different `type` to be specified, which can be passed
 #'   to `predict()` via `predict_type`.
+#' @param returnList Logical whether to return list of results after main outer
+#'   CV loop without concatenating results. Useful for debugging.
 #' @param na.option Character value specifying how `NA`s are dealt with.
 #'   `"omit"` is equivalent to `na.action = na.omit`. `"omitcol"` removes cases
 #'   if there are `NA` in 'y', but columns (predictors) containing `NA` are
@@ -80,6 +85,10 @@
 #'   is to use [nestcv.train] with `tuneGrid` set as a single row of a
 #'   data.frame. The parameters which are needed for a specific model can be
 #'   identified using [caret::modelLookup()].
+#'   
+#'   Case weights can be passed to model function which accept these, however
+#'   `outercv` assumes that these are passed to the model via an argument named
+#'   `weights`.
 #'
 #'   Note that in the case of `model = lm`, although additional arguments e.g.
 #'   `subset`, `weights`, `offset` are passed into the model function via
@@ -157,6 +166,7 @@ outercv.default <- function(y, x,
                             model,
                             filterFUN = NULL,
                             filter_options = NULL,
+                            weights = NULL,
                             balance = NULL,
                             balance_options = NULL,
                             outer_method = c("cv", "LOOCV"),
@@ -165,14 +175,21 @@ outercv.default <- function(y, x,
                             cv.cores = 1,
                             predict_type = "prob",
                             na.option = "pass",
+                            returnList = FALSE,
                             ...) {
   outercv.call <- match.call(expand.dots = TRUE)
-  ok <- checkxy(y, x, na.option)
+  ok <- checkxy(y, x, na.option, weights)
   y <- y[ok$r]
   x <- x[ok$r, ok$c]
+  weights <- weights[ok$r]
+  if (!is.null(balance) & !is.null(weights)) {
+    stop("`balance` and `weights` cannot be used at the same time")}
   reg <- !(is.factor(y) | is.character(y))  # y = regression
   if (!is.null(balance) & reg) {
     stop("`balance` can only be used for classification")}
+  if (!is.null(weights) & !checkArg("weights", model)) {
+    warning("'weights' argument not found in model function")
+  }
   outer_method <- match.arg(outer_method)
   if (is.null(outer_folds)) {
     outer_folds <- switch(outer_method,
@@ -180,28 +197,33 @@ outercv.default <- function(y, x,
                           LOOCV = 1:length(y))
   }
   if (outercv.call$model == "glm") predict_type <- "response"
+  if (outercv.call$model == "mda") predict_type <- "posterior"
   
   if (Sys.info()["sysname"] == "Windows" & cv.cores >= 2) {
     cl <- makeCluster(cv.cores)
+    dots <- list(...)
     clusterExport(cl, varlist = c("outer_folds", "y", "x", "model", "reg",
                                   "filterFUN", "filter_options",
-                                  "balance", "balance_options",
-                                  "predict_type", "outercvCore", ...),
+                                  "weights", "balance", "balance_options",
+                                  "predict_type", "outercvCore", "dots"),
                   envir = environment())
+    on.exit(stopCluster(cl))
     outer_res <- parLapply(cl = cl, outer_folds, function(test) {
-      outercvCore(test, y, x, model, reg,
-                  filterFUN, filter_options,
-                  balance, balance_options, predict_type, ...)
+      args <- c(list(test=test, y=y, x=x, model=model, reg=reg,
+                     filterFUN=filterFUN, filter_options=filter_options,
+                     weights=weights, balance=balance,
+                     balance_options=balance_options,
+                     predict_type=predict_type), dots)
+      do.call(outercvCore, args)
     })
-    stopCluster(cl)
   } else {
     outer_res <- mclapply(outer_folds, function(test) {
       outercvCore(test, y, x, model, reg,
-                  filterFUN, filter_options,
+                  filterFUN, filter_options, weights,
                   balance, balance_options, predict_type, ...)
     }, mc.cores = cv.cores)
   }
-  
+  if (returnList) return(outer_res)
   predslist <- lapply(outer_res, '[[', 'preds')
   output <- data.table::rbindlist(predslist)
   output <- as.data.frame(output)
@@ -218,20 +240,27 @@ outercv.default <- function(y, x,
   }
   
   # fit final model
-  filtx <- if (is.null(filterFUN)) x else {
-    args <- list(y = y, x = x)
-    args <- append(args, filter_options)
-    fset <- do.call(filterFUN, args)
-    x[, fset]
-  }
+  dat <- nest_filt_bal(NULL, y, x, filterFUN, filter_options,
+                       balance, balance_options)
+  yfinal <- dat$ytrain
+  filtx <- dat$filt_xtrain
   
   if ("formula" %in% formalArgs(model)) {
     dat <- if (is.data.frame(filtx)) {filtx
     } else as.data.frame(filtx, stringsAsFactors = TRUE)
-    dat$.outcome <- y
-    fit <- model(as.formula(".outcome ~ ."), data = dat, ...)
+    dat$.outcome <- yfinal
+    if (is.null(weights)) {
+      fit <- model(as.formula(".outcome ~ ."), data = dat, ...)
+    } else {
+      fit <- model(as.formula(".outcome ~ ."), data = dat,
+                   weights = weights, ...)
+    }
   } else {
-    fit <- model(y = y, x = filtx, ...)
+    if (is.null(weights)) {
+      fit <- model(y = yfinal, x = filtx, ...)
+    } else {
+      fit <- model(y = yfinal, x = filtx, weights = weights, ...)
+    }
   }
   out <- list(call = outercv.call,
               output = output,
@@ -240,6 +269,7 @@ outercv.default <- function(y, x,
               outer_folds = outer_folds,
               dimx = dim(x),
               y = y,
+              yfinal = yfinal,
               final_fit = fit,
               final_vars = colnames(filtx),
               summary_vars = summary_vars(filtx),
@@ -251,7 +281,7 @@ outercv.default <- function(y, x,
 
 
 outercvCore <- function(test, y, x, model, reg,
-                        filterFUN, filter_options,
+                        filterFUN, filter_options, weights,
                         balance, balance_options, predict_type, ...) {
   dat <- nest_filt_bal(test, y, x, filterFUN, filter_options,
                        balance, balance_options)
@@ -265,9 +295,18 @@ outercvCore <- function(test, y, x, model, reg,
     dat <- if (is.data.frame(filt_xtrain)) {filt_xtrain
     } else as.data.frame(filt_xtrain, stringsAsFactors = TRUE)
     dat$.outcome <- ytrain
-    fit <- model(as.formula(".outcome ~ ."), data = dat, ...)
+    if (is.null(weights)) {
+      fit <- model(as.formula(".outcome ~ ."), data = dat, ...)
+    } else {
+      fit <- model(as.formula(".outcome ~ ."), data = dat,
+                   weights = weights[-test], ...)
+    }
   } else {
-    fit <- model(y = ytrain, x = filt_xtrain, ...)
+    if (is.null(weights)) {
+      fit <- model(y = ytrain, x = filt_xtrain, ...)
+    } else {
+      fit <- model(y = ytrain, x = filt_xtrain, weights = weights[-test], ...)
+    }
   }
   # test on outer CV
   predy <- predict(fit, newdata = filt_xtest)
@@ -333,15 +372,17 @@ outercv.formula <- function(formula, data,
   
   if (Sys.info()["sysname"] == "Windows" & cv.cores >= 2) {
     cl <- makeCluster(cv.cores)
+    dots <- list(...)
     clusterExport(cl, varlist = c("outer_folds", "formula", "data", "y", 
                                   "model", "reg", "predict_type",
-                                  "outercvFormulaCore", ...),
+                                  "outercvFormulaCore", "dots"),
                   envir = environment())
+    on.exit(stopCluster(cl))
     outer_res <- parLapply(cl = cl, outer_folds, function(test) {
-      outercvFormulaCore(test, formula, data, y, model,
-                         reg, predict_type, ...)
+      args <- c(list(test=test, formula=formula, data=data, y=y, model=model,
+                     reg=reg, predict_type=predict_type), dots)
+      do.call(outercvFormulaCore, args)
     })
-    stopCluster(cl)
   } else {
     outer_res <- mclapply(outer_folds, function(test) {
       outercvFormulaCore(test, formula, data, y, model,

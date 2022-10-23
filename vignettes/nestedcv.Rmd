@@ -63,9 +63,8 @@ outer folds are compared against the true results for the outer test folds and
 the results concatenated, to give measures of accuracy (e.g. AUC and accuracy
 for classification, or RMSE for regression) across the whole dataset.
 
-Finally, the tuning parameters for each model in the outer folds are averaged to
-give the mean best parameters across all outer folds. A final model is fitted
-across the whole data using these final hyperparameters and can be used for
+A final round of CV is performed on the whole dataset to determine
+hyperparameters to fit the final model to the whole data, which can be used for
 prediction with external data.
 
 ### Variable selection
@@ -430,15 +429,16 @@ The number of samples in each class in the outer CV folds can be checked on
 A custom balancing function can be provided. The function must be of the form:
 
 ```{r eval = FALSE}
-balance <- function(y, x, ...) {}
+balance <- function(y, x, ...) {
+  
+  return(list(y = y, x = x))
+}
 ```
 
 Other arguments can be passed in to the balance function as a named list via the
 `balance_options` argument. The function must return a list containing `y` an
 expanded/altered response vector and `x` the matrix or dataframe of predictors
-with increased/decreased samples in rows and predictors in columns. In theory
-manipulation of predictors to generate additional, composite predictors would be
-supported here.
+with increased/decreased samples in rows and predictors in columns.
 
 ### Nested CV with caret
 
@@ -472,6 +472,13 @@ glmnet_coefs(ncv$final_fit$finalModel, s = ncv$finalTune$lambda)
 ```
 
 ### Notes on caret
+
+It is important to try calls to `nestcv.train` with `cv.cores=1` first. With
+`caret` this may flag up that specific packages are not installed or that there
+are problems with input variables `y` and `x` which may have to be corrected for
+the call to run in multicore mode. Once it is clear that the call to
+`nestcv.train` is working ok, you can quit single core execution and restart in
+multicore mode.
 
 It is important to realise that the `train()` function in `caret` sets a
 parameter known as `tuneLength` to 3 by default, so the default tuning grid is
@@ -517,6 +524,7 @@ preds <- predict(ncv, newdata = data.rtx)
 ```
 
 ### Bayesian shrinkage models
+
 The two examples below implement Bayesian linear and logistic regression models
 using the horseshoe prior over parameters to encourage a sparse model. Models
 are fitted using the `hsstan` R package, which performs full Bayesian inference
@@ -682,6 +690,19 @@ filtering process can be time consuming (e.g. `rf_filter`, `relieff_filter`), we
 tend to recommend parallelisation of the outer CV loop over parallelisation of
 the inner CV loop.
 
+To check the number of physical cores, use:
+
+```{r eval = FALSE}
+parallel::detectCores(logical = FALSE)
+```
+
+To maintain consistency with random numbers during parallelisation set the
+random number seed in the following way:
+
+```{r eval = FALSE}
+set.seed(123, "L'Ecuyer-CMRG")
+```
+
 The `caret` package is set up for parallelisation using `foreach`
 (https://topepo.github.io/caret/parallel-processing.html). We generally do not
 recommend nested parallelisation of both outer and inner loops, although this is
@@ -696,6 +717,15 @@ Note at time of writing, there appears to be a bug in `rstan` (used by `hsstan`)
 leading to it ignoring the argument `cores` and instead spawning multiple
 processes as specified by the `chain` argument. This behaviour can be limited by
 setting `options(mc.cores = ..)`.
+
+# Troubleshooting
+
+A key problem with parallelisation in R is that errors, warnings and user input
+generally have to be suppressed during multicore processing. If a `nestedcv`
+call is not working, we strongly recommend that you try it with `cv.cores=1`
+first. With `caret` this may flag up that specific packages are not installed or
+that there are problems with input variables `y` and `x` which may have to be
+corrected for the call to run in multicore mode.
 
 # References
 

@@ -15,6 +15,9 @@
 #'   character vector with names of filtered predictors.
 #' @param filter_options List of additional arguments passed to the filter
 #'   function specified by `filterFUN`.
+#' @param weights Weights applied to each sample for models which can use
+#'   weights. Note `weights` and `balance` cannot be used at the same time.
+#'   Weights are not applied in filters.
 #' @param balance Specifies method for dealing with imbalanced class data.
 #'   Current options are `"randomsample"` or `"smote"`. See [randomsample()] and
 #'   [smote()]
@@ -41,6 +44,12 @@
 #' @param cv.cores Number of cores for parallel processing of the outer loops.
 #'   NOTE: this uses `parallel::mclapply` on unix/mac and `parallel::parLapply`
 #'   on windows.
+#' @param finalCV Logical whether to perform one last round of CV on the whole
+#'   dataset to determine the final model parameters. If set to `FALSE`, the
+#'   median of the best hyperparameters from outer CV folds for continuous/
+#'   ordinal hyperparameters, or highest voted for categorical hyperparameters,
+#'   are used to fit the final model. Performance metrics are independent of
+#'   this last step.
 #' @param na.option Character value specifying how `NA`s are dealt with.
 #'   `"omit"` is equivalent to `na.action = na.omit`. `"omitcol"` removes cases
 #'   if there are `NA` in 'y', but columns (predictors) containing `NA` are
@@ -53,8 +62,10 @@
 #'   \item{outer_result}{List object of results from each outer fold containing
 #'   predictions on left-out outer folds, caret result and number of filtered
 #'   predictors at each fold.}
-#'   \item{dimx}{dimensions of `x`}
 #'   \item{outer_folds}{List of indices of outer test folds}
+#'   \item{dimx}{dimensions of `x`}
+#'   \item{y}{original response vector}
+#'   \item{yfinal}{final response vector (post-balancing)}
 #'   \item{final_fit}{Final fitted caret model using best tune parameters}
 #'   \item{final_vars}{Column names of filtered predictors entering final model}
 #'   \item{summary_vars}{Summary statistics of filtered predictors}
@@ -65,8 +76,21 @@
 #'   \item{summary}{Overall performance summary. Accuracy and balanced accuracy
 #'   for classification. ROC AUC for binary classification. RMSE for
 #'   regression.}
-#' @details Parallelisation is performed on the outer folds using `mclapply`.
-#'   For classification `metric` defaults to using 'logLoss' with the
+#' @details
+#' Parallelisation is performed on the outer folds using `parallel::mclapply` on
+#' unix/mac and `parallel::parLapply` on windows.
+#'
+#' We strongly recommend that you try calls to `nestcv.train` with `cv.cores=1`
+#' first. With `caret` this may flag up that specific packages are not installed
+#' or that there are problems with input variables `y` and `x` which may have to
+#' be corrected for the call to run in multicore mode.
+#'   
+#'   If the outer folds are run using parallelisation, then parallelisation in
+#'   caret must be off, otherwise an error will be generated. Alternatively if
+#'   you wish to use parallelisation in caret, then parallelisation in
+#'   `nestcv.train` can be fully disabled by leaving `cv.cores = 1`.
+#'   
+#'   For classification, `metric` defaults to using 'logLoss' with the
 #'   `trControl` arguments `classProbs = TRUE, summaryFunction = mnLogLoss`,
 #'   rather than 'Accuracy' which is the default classification metric in
 #'   `caret`. See [trainControl]. LogLoss is arguably more consistent than
@@ -123,6 +147,8 @@
 #' @importFrom caret createFolds train trainControl mnLogLoss confusionMatrix
 #'   defaultSummary
 #' @importFrom data.table rbindlist
+#' @importFrom doParallel registerDoParallel
+#' @importFrom foreach registerDoSEQ
 #' @importFrom parallel mclapply
 #' @importFrom pROC roc
 #' @importFrom stats predict setNames
@@ -131,6 +157,7 @@
 nestcv.train <- function(y, x,
                          filterFUN = NULL,
                          filter_options = NULL,
+                         weights = NULL,
                          balance = NULL,
                          balance_options = NULL,
                          outer_method = c("cv", "LOOCV"),
@@ -141,15 +168,19 @@ nestcv.train <- function(y, x,
                          trControl = NULL,
                          tuneGrid = NULL,
                          savePredictions = "final",
+                         finalCV = TRUE,
                          na.option = "pass",
                          ...) {
   nestcv.call <- match.call(expand.dots = TRUE)
   outer_method <- match.arg(outer_method)
   if (!is.null(balance) & is.numeric(y)) {
     stop("`balance` can only be used for classification")}
-  ok <- checkxy(y, x, na.option)
+  ok <- checkxy(y, x, na.option, weights)
   y <- y[ok$r]
   x <- x[ok$r, ok$c]
+  weights <- weights[ok$r]
+  if (!is.null(balance) & !is.null(weights)) {
+    stop("`balance` and `weights` cannot be used at the same time")}
   if (is.null(trControl)) {
     trControl <- if (is.factor(y)) {
       trainControl(method = "cv", 
@@ -173,24 +204,25 @@ nestcv.train <- function(y, x,
   
   if (Sys.info()["sysname"] == "Windows" & cv.cores >= 2) {
     cl <- makeCluster(cv.cores)
-    clusterExport(cl, varlist = c("outer_folds", "y", "x", 
-                                  "filterFUN", "filter_options",
-                                  "balance", "balance_options",
-                                  "metric", "trControl", "tuneGrid",
-                                  "nestcv.trainCore", ...),
-                  envir = environment())
+    dots <- list(...)
+    varlist <- c("outer_folds", "y", "x", "filterFUN", "filter_options",
+                 "weights", "balance", "balance_options",
+                 "metric", "trControl", "tuneGrid", "nestcv.trainCore", "dots")
+    clusterExport(cl, varlist = varlist, envir = environment())
     outer_res <- parLapply(cl = cl, outer_folds, function(test) {
-      nestcv.trainCore(test, y, x,
-                       filterFUN, filter_options,
-                       balance, balance_options,
-                       metric, trControl, tuneGrid, ...)
+      args <- c(list(test=test, y=y, x=x,
+                     filterFUN=filterFUN, filter_options=filter_options,
+                     weights=weights, balance=balance,
+                     balance_options=balance_options, metric=metric,
+                     trControl=trControl, tuneGrid=tuneGrid), dots)
+      do.call(nestcv.trainCore, args)
     })
     stopCluster(cl)
   } else {
     outer_res <- mclapply(outer_folds, function(test) {
       nestcv.trainCore(test, y, x,
                        filterFUN, filter_options,
-                       balance, balance_options,
+                       weights, balance, balance_options,
                        metric, trControl, tuneGrid, ...)
     }, mc.cores = cv.cores)
   }
@@ -208,19 +240,42 @@ nestcv.train <- function(y, x,
   }
   bestTunes <- lapply(outer_res, function(i) i$fit$bestTune)
   bestTunes <- as.data.frame(data.table::rbindlist(bestTunes))
-  rownames(bestTunes) <- paste('Fold', seq_len(n_outer_folds))
-  finalTune <- colMeans(bestTunes)
-  finalTune <- data.frame(as.list(finalTune))
-  filtx <- if (is.null(filterFUN)) x else {
-    args <- list(y = y, x = x)
-    args <- append(args, filter_options)
-    fset <- do.call(filterFUN, args)
-    x[, fset]
+  rownames(bestTunes) <- paste('Fold', seq_len(nrow(bestTunes)))
+  
+  dat <- nest_filt_bal(NULL, y, x, filterFUN, filter_options,
+                       balance, balance_options)
+  yfinal <- dat$ytrain
+  filtx <- dat$filt_xtrain
+  
+  if (finalCV) {
+    # use CV on whole data to finalise parameters
+    if (cv.cores >= 2) {
+      if (Sys.info()["sysname"] == "Windows") {
+        cl <- makeCluster(cv.cores)
+        registerDoParallel(cl)
+        on.exit({stopCluster(cl)
+          foreach::registerDoSEQ()})
+      } else {
+        # unix
+        registerDoParallel(cores = cv.cores)
+        on.exit(foreach::registerDoSEQ())
+      }
+    }
+    final_fit <- caret::train(x = filtx, y = yfinal,
+                              weights = weights,
+                              metric = metric,
+                              trControl = trControl,
+                              tuneGrid = tuneGrid, ...)
+    finalTune <- final_fit$bestTune
+  } else {
+    # use outer folds for final parameters, fit single final model
+    finalTune <- finaliseTune(bestTunes)
+    fitControl <- trainControl(method = "none", classProbs = is.factor(y))
+    final_fit <- caret::train(x = filtx, y = yfinal,
+                              weights = weights,
+                              trControl = fitControl,
+                              tuneGrid = finalTune, ...)
   }
-  fitControl <- trainControl(method = "none", classProbs = TRUE)
-  final_fit <- caret::train(x = filtx, y = y, 
-                            trControl = fitControl,
-                            tuneGrid = finalTune, ...)
   
   out <- list(call = nestcv.call,
               output = output,
@@ -229,6 +284,7 @@ nestcv.train <- function(y, x,
               outer_folds = outer_folds,
               dimx = dim(x),
               y = y,
+              yfinal = yfinal,
               final_fit = final_fit,
               final_vars = colnames(filtx),
               roc = caret.roc,
@@ -243,7 +299,7 @@ nestcv.train <- function(y, x,
 
 nestcv.trainCore <- function(test, y, x,
                              filterFUN, filter_options,
-                             balance, balance_options,
+                             weights, balance, balance_options,
                              metric, trControl, tuneGrid, ...) {
   dat <- nest_filt_bal(test, y, x, filterFUN, filter_options,
                        balance, balance_options)
@@ -253,6 +309,7 @@ nestcv.trainCore <- function(test, y, x,
   filt_xtest <- dat$filt_xtest
   
   fit <- caret::train(x = filt_xtrain, y = ytrain,
+                      weights = weights[-test],
                       metric = metric,
                       trControl = trControl,
                       tuneGrid = tuneGrid, ...)
@@ -268,6 +325,19 @@ nestcv.trainCore <- function(test, y, x,
               fit = fit,
               nfilter = ncol(filt_xtrain))
   ret
+}
+
+
+# finalise the caret model tuning from bestTune dataframe
+#' @importFrom stats median
+finaliseTune <- function(x) {
+  fintune <- lapply(colnames(x), function(i) {
+    if (is.numeric(x[, i])) return(median(x[, i]))
+    tab <- table(x[, i])
+    names(tab)[which.max(tab)]  # majority vote for factors
+  })
+  names(fintune) <- colnames(x)
+  data.frame(fintune, check.names = FALSE)
 }
 
 
