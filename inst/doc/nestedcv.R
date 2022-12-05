@@ -161,6 +161,77 @@ knitr::include_graphics("boxplot.png")
 ## ----eval = FALSE-------------------------------------------------------------
 #  filter <- function(y, x, ...) {}
 
+## -----------------------------------------------------------------------------
+## Imbalanced dataset
+set.seed(1, "L'Ecuyer-CMRG")
+x <- matrix(rnorm(150 * 2e+04), 150, 2e+04)  # predictors
+y <- factor(rbinom(150, 1, 0.2))  # imbalanced binary response
+table(y)
+
+## first 30 parameters are weak predictors
+x[, 1:30] <- rnorm(150 * 30, 0, 1) + as.numeric(y)*0.5
+
+## -----------------------------------------------------------------------------
+out <- randomsample(y, x)
+y2 <- out$y
+x2 <- out$x
+table(y2)
+
+## Nested CV glmnet with unnested balancing by random oversampling on
+## whole dataset
+fit1 <- nestcv.glmnet(y2, x2, family = "binomial", alphaSet = 1,
+                      n_outer_folds = 3,
+                      cv.cores=2,
+                      filterFUN = ttest_filter)
+fit1$summary
+
+## -----------------------------------------------------------------------------
+out <- randomsample(y, x, minor=1, major=0.4)
+y2 <- out$y
+x2 <- out$x
+table(y2)
+
+## Nested CV glmnet with unnested balancing by random undersampling on
+## whole dataset
+fit1b <- nestcv.glmnet(y2, x2, family = "binomial", alphaSet = 1,
+                       n_outer_folds = 3,
+                       cv.cores=2,
+                       filterFUN = ttest_filter)
+fit1b$summary
+
+## Balance x & y outside of CV loop by SMOTE
+out <- smote(y, x)
+y2 <- out$y
+x2 <- out$x
+table(y2)
+
+## Nested CV glmnet with unnested balancing by SMOTE on whole dataset
+fit2 <- nestcv.glmnet(y2, x2, family = "binomial", alphaSet = 1,
+                      n_outer_folds = 3,
+                      cv.cores=2,
+                      filterFUN = ttest_filter)
+fit2$summary
+
+## -----------------------------------------------------------------------------
+## Nested CV glmnet with nested balancing by random oversampling
+fit3 <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
+                      n_outer_folds = 3,
+                      cv.cores=2,
+                      balance = "randomsample",
+                      filterFUN = ttest_filter)
+fit3$summary
+
+## -----------------------------------------------------------------------------
+plot(fit1$roc, col='green')
+lines(fit1b$roc, col='red')
+lines(fit2$roc, col='blue')
+lines(fit3$roc)
+legend('bottomright', legend = c("Unnested random oversampling", 
+                                 "Unnested SMOTE",
+                                 "Unnested random undersampling",
+                                 "Nested balancing"), 
+       col = c("green", "blue", "red", "black"), lty = 1, lwd = 2, bty = "n", cex=0.8)
+
 ## ----eval = FALSE-------------------------------------------------------------
 #  balance <- function(y, x, ...) {
 #  
@@ -237,12 +308,13 @@ res.cv.hsstan <- outercv(y = dt$outcome.cont, x = dt[, c(uvars, pvars)],
                                                nfilter = 2,
                                                p_cutoff = NULL,
                                                rsq_cutoff = 0.9),
-                         n_outer_folds = nfolds, cv.cores = cv.cores,
-                         unpenalized = uvars, warmup = 1000, iter = 2000)
-# view prediction performance based on testing folds
+                         n_outer_folds = nfolds, chains = 2,
+                         cv.cores = cv.cores,
+                         unpenalized = uvars, warmup = 100, iter = 200)
+
+## -----------------------------------------------------------------------------
 summary(res.cv.hsstan)
 
-# load hsstan package to examine the Bayesian model
 library(hsstan)
 sampler.stats(res.cv.hsstan$final_fit)
 print(projsel(res.cv.hsstan$final_fit), digits = 4)  # adding marker2
@@ -254,14 +326,7 @@ sigmoid <- function(x) {1 / (1 + exp(-x))}
 
 # specify options for running the code
 nfolds <- 3
-
-# specify number of cores for parallelising computation
-# the product of cv.cores and mc.cores will be used in total
-# number of cores for parallelising over CV folds
 cv.cores <- 1
-# number of cores for parallelising hsstan sampling
-# to pass CRAN package checks we need to create object oldopt
-# in the end we reset options to the old configuration
 oldopt <- options(mc.cores = 2)
 
 # load iris dataset and create a binary outcome
@@ -273,7 +338,6 @@ dt <- as.data.frame(apply(dt, 2, scale))
 rownames(dt) <- paste0("sample", c(1:nrow(dt)))
 dt$outcome.bin <- sigmoid(0.5 * dt$marker1 + 2 * dt$marker2) > runif(nrow(dt))
 dt$outcome.bin <- factor(dt$outcome.bin)
-
 
 # unpenalised covariates: always retain in the prediction model
 uvars <- "marker1"
@@ -288,11 +352,11 @@ res.cv.hsstan <- outercv(y = dt$outcome.bin,
                                                nfilter = 2,
                                                p_cutoff = NULL,
                                                rsq_cutoff = 0.9),
-                         n_outer_folds = nfolds, cv.cores = cv.cores,
-                         unpenalized = uvars, warmup = 1000, iter = 2000)
+                         n_outer_folds = nfolds, chains = 2,
+                         cv.cores = cv.cores,
+                         unpenalized = uvars, warmup = 100, iter = 200)
 
-
-# view prediction performance based on testing folds
+## -----------------------------------------------------------------------------
 summary(res.cv.hsstan)
 
 # examine the Bayesian model

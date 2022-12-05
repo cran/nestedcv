@@ -40,6 +40,8 @@
 #' @param keep Logical indicating whether inner CV predictions are retained for
 #'   calculating left-out inner CV fold accuracy etc. See argument `keep` in
 #'   [cv.glmnet].
+#' @param outer_train_predict Logical whether to save predictions on outer
+#'   training folds to calculate performance on outer training folds.
 #' @param weights Weights applied to each sample. Note `weights` and `balance`
 #'   cannot be used at the same time. Weights are only applied in glmnet and not
 #'   in filters.
@@ -155,6 +157,7 @@ nestcv.glmnet <- function(y, x,
                           alphaSet = seq(0, 1, 0.1),
                           min_1se = 0,
                           keep = TRUE,
+                          outer_train_predict = FALSE,
                           weights = NULL,
                           penalty.factor = rep(1, ncol(x)),
                           cv.cores = 1,
@@ -164,6 +167,7 @@ nestcv.glmnet <- function(y, x,
   family <- match.arg(family)
   nestcv.call <- match.call(expand.dots = TRUE)
   outer_method <- match.arg(outer_method)
+  if (is.character(y)) y <- factor(y)
   x <- as.matrix(x)
   if (is.null(colnames(x))) colnames(x) <- paste0("V", seq_len(ncol(x)))
   ok <- checkxy(y, x, na.option, weights)
@@ -187,7 +191,7 @@ nestcv.glmnet <- function(y, x,
     varlist = c("outer_folds", "y", "x", "filterFUN", "filter_options",
                 "alphaSet", "min_1se",  "n_inner_folds", "keep", "family",
                 "weights", "balance", "balance_options", "penalty.factor",
-                "nestcv.glmnetCore", "dots")
+                "outer_train_predict", "nestcv.glmnetCore", "dots")
     clusterExport(cl, varlist = varlist, envir = environment())
     on.exit(stopCluster(cl))
     outer_res <- parLapply(cl = cl, outer_folds, function(test) {
@@ -196,7 +200,8 @@ nestcv.glmnet <- function(y, x,
                      balance=balance, balance_options=balance_options,
                      alphaSet=alphaSet, min_1se=min_1se,
                      n_inner_folds=n_inner_folds, keep=keep, family=family,
-                     weights=weights, penalty.factor=penalty.factor), dots)
+                     weights=weights, penalty.factor=penalty.factor,
+                     outer_train_predict=outer_train_predict), dots)
       do.call(nestcv.glmnetCore, args)
     })
   } else {
@@ -204,7 +209,7 @@ nestcv.glmnet <- function(y, x,
       nestcv.glmnetCore(test, y, x, filterFUN, filter_options,
                         balance, balance_options,
                         alphaSet, min_1se, n_inner_folds, keep, family,
-                        weights, penalty.factor, ...)
+                        weights, penalty.factor, outer_train_predict, ...)
     }, mc.cores = cv.cores)
   }
   
@@ -273,7 +278,8 @@ nestcv.glmnet <- function(y, x,
 nestcv.glmnetCore <- function(test, y, x, filterFUN, filter_options,
                               balance, balance_options,
                               alphaSet, min_1se, n_inner_folds, keep, family,
-                              weights, penalty.factor, ...) {
+                              weights, penalty.factor,
+                              outer_train_predict, ...) {
   dat <- nest_filt_bal(test, y, x, filterFUN, filter_options,
                        balance, balance_options, penalty.factor)
   ytrain <- dat$ytrain
@@ -300,8 +306,21 @@ nestcv.glmnetCore <- function(test, y, x, filterFUN, filter_options,
     predyp <- predict(alphafit, newx = filt_xtest, s = s)[,, 1]
     preds <- cbind(preds, predyp)
   }
+  if (outer_train_predict) {
+    train_predy <- as.vector(predict(alphafit, newx = filt_xtrain, s = s, type = "class"))
+    train_preds <- data.frame(ytrain=ytrain, predy=train_predy)
+    if (family == "binomial") {
+      predyp <- as.vector(predict(alphafit, newx = filt_xtrain, s = s))
+      train_preds <- cbind(train_preds, predyp)
+    } else if (family == "multinomial") {
+      # glmnet generates 3d array
+      predyp <- predict(alphafit, newx = filt_xtrain, s = s)[,, 1]
+      train_preds <- cbind(train_preds, predyp)
+    }
+  } else train_preds <- NULL
   rownames(preds) <- rownames(filt_xtest)
   ret <- list(preds = preds,
+              train_preds = train_preds,
               lambda = s,
               alpha = cvafit$best_alpha,
               coef = cf,
@@ -461,7 +480,7 @@ summary.nestcv.glmnet <- function(object, digits = max(3L, getOption("digits") -
   cat("\nFinal coefficients:\n")
   print(coef(object), digits = digits)
   cat("\nResult:\n")
-  print(object$summary, digits = digits, print.gap = 2L)
+  print(object$summary, digits = digits, print.gap = 3L)
   out <- list(dimx = object$dimx, folds = foldres,
               final_param = object$final_param,
               coef = coef(object), result = object$summary)
@@ -489,36 +508,3 @@ predict.nestcv.glmnet <- function(object, newdata,
   predict(object$final_fit, newx = newx, s = unname(s), ...)
 }
 
-#' Summarise prediction performance metrics
-#' 
-#' Quick function to calculate performance metrics: accuracy and balanced
-#' accuracy for classification; ROC AUC for binary classification; RMSE for
-#' regression.
-#' 
-#' @param output data.frame with columns `testy` containing observed response
-#'   from test folds; `predy` predicted response; `predyp` (optional) predicted
-#'   probabilities for classification to calculate ROC AUC
-#' @return Vector containing accuracy and balanced accuracy for classification,
-#'   ROC AUC for binary classification, RMSE for regression.
-#' 
-#' @export
-predSummary <- function(output) {
-  if (is.factor(output$testy)) {
-    cm <- table(output$predy, output$testy)
-    acc <- sum(diag(cm))/ sum(cm)
-    ccm <- caret::confusionMatrix(cm)
-    b_acc <- ccm$byClass[11]
-    if (nlevels(output$testy) == 2) {
-      outputroc <- pROC::roc(output$testy, output$predyp, direction = "<", 
-                              quiet = TRUE)
-      auc <- outputroc$auc
-      summary <- setNames(c(auc, acc, b_acc), c("AUC", "Accuracy", "Balanced accuracy"))
-    } else {
-      summary <- setNames(c(acc, b_acc), c("Accuracy", "Balanced accuracy"))
-    }
-  } else {
-    df <- data.frame(obs = output$testy, pred = output$predy)
-    summary <- caret::defaultSummary(df)
-  }
-  summary
-}

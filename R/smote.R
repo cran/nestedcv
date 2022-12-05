@@ -24,6 +24,7 @@
 
 smote <- function(y, x, k = 5, over = NULL, yminor = NULL) {
   stopifnot(k >= 1)
+  if (is.null(rownames(x))) rownames(x) <- paste0("S", seq_len(nrow(x)))
   y <- droplevels(y)
   ytab <- table(y)
   
@@ -72,7 +73,8 @@ smoteN <- function(xminor, k, n) {
     r <- runif(1)
     x1 * r + x2 * (1-r)
   }, numeric(ncol(xminor)))
-  colnames(out) <- paste0(rownames(xminor)[s1], ".sm")
+  colnames(out) <- make.names(paste0(rownames(xminor)[s1], ".sm"),
+                              unique = TRUE)
   t(out)
 }
 

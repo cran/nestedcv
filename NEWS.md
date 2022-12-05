@@ -1,6 +1,22 @@
 News
 =====
 
+# nestedcv 0.4.4
+###### 05/12/2022
+* Add confusion matrix to results summaries for classification
+* Fix bugs in extraction of inner CV predictions for `nestcv.glmnet`
+* Fix multinomial `nestcv.glmnet`
+* Add `outer_train_predict` argument to enable saving of predictions on outer
+training folds
+* Add function `train_preds` to obtain outer training fold predictions
+* Add function `train_summary` to show performance metrics on outer training
+folds
+
+# nestedcv 0.4.1
+###### 12/11/2022
+* Add examples of imbalance datasets
+* Fix rowname bug in `smote()`
+
 # nestedcv 0.4.0
 ###### 28/09/2022
 * Add support for nested CV on ensemble models from `SuperLearner` package

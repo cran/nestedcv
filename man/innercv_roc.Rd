@@ -2,22 +2,16 @@
 % Please edit documentation in R/innercv_roc.R
 \name{innercv_roc}
 \alias{innercv_roc}
-\alias{innercv_roc.nestcv.glmnet}
-\alias{innercv_roc.nestcv.train}
 \title{Build ROC curve from left-out folds from inner CV}
 \usage{
-innercv_roc(x, ...)
-
-\method{innercv_roc}{nestcv.glmnet}(x, direction = "<", ...)
-
-\method{innercv_roc}{nestcv.train}(x, direction = "<", ...)
+innercv_roc(x, direction = "<", ...)
 }
 \arguments{
-\item{x}{Fitted \code{nestedcv} object}
-
-\item{...}{Other arguments passed to \link[pROC:roc]{pROC::roc}}
+\item{x}{a \code{nestcv.glmnet} or \code{nestcv.train} fitted object}
 
 \item{direction}{Set ROC directionality \link[pROC:roc]{pROC::roc}}
+
+\item{...}{Other arguments passed to \link[pROC:roc]{pROC::roc}}
 }
 \value{
 \code{"roc"} object, see \link[pROC:roc]{pROC::roc}
@@ -59,7 +53,8 @@ predSummary(output)
 ## Nested CV
 fit2 <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
                       filterFUN = ttest_filter,
-                      filter_options = list(nfilter = 100))
+                      filter_options = list(nfilter = 100),
+                      n_outer_folds = 3)
 summary(fit2)
 
 ## ROC plots
