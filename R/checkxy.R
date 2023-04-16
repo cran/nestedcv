@@ -1,5 +1,5 @@
 
-checkxy <- function(y, x, na.option, weights = NULL) {
+checkxy <- function(y, x, na.option = "pass", weights = NULL) {
   if (length(y) != nrow(x))
     stop("Mismatch in length of 'y' and number of rows in 'x'", call. = FALSE)
   if (!is.null(weights)) {
@@ -23,6 +23,13 @@ checkxy <- function(y, x, na.option, weights = NULL) {
   if (na.option == "omitcol") {
     okr <- !nay
     okc <- !naxc
+  }
+  sc <- scale(x)
+  sds <- attr(sc, "scaled:scale")  # Rfast & matrixStats have bugs if var=0
+  var0 <- sds == 0
+  if (any(var0)) {
+    message(sum(var0), " predictor(s) have var=0")
+    okc <- okc & !var0
   }
   list(r = okr, c = okc)
 }

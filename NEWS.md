@@ -1,6 +1,52 @@
 News
 =====
 
+# nestedcv 0.6.1
+###### 15/04/2023
+* Add vignette for variable stability and SHAP value analysis
+* Refine variable stability and shap plots
+
+# nestedcv 0.6.0
+###### 19/03/2023
+* Switch some packages from Imports to Suggests to make basic installation 
+simpler.
+* Provide helper prediction wrapper functions to make it easier to use package 
+`fastshap` for calculating SHAP values.
+* Add `force_vars` argument to `glmnet_filter()`
+* Add `ranger_filter()`
+
+# nestedcv 0.5.2
+###### 17/02/2023
+* Disable printing in `nestcv.train()` from models such as `gbm`. This fixes 
+multicore bug when using standard R gui on mac/linux.
+* Bugfix if `nestcv.glmnet()` model has 0 or 1 coefficients.
+* Add multiclass AUC for multinomial classification.
+
+# nestedcv 0.5.0
+###### 23/01/2023
+* `nestedcv` models now return `xsub` containing a subset of the predictor
+matrix `x` with filtered variables across outer folds and the final fit
+* `boxplot_model()` no longer needs the predictor matrix to be specified as it 
+is contained in `xsub` in `nestedcv` models
+* `boxplot_model()` now works for all `nestedcv` model types
+* Add function `var_stability()` to assess variance and stability of variable 
+importance across outer folds, and directionality for binary outcome
+* Add function `plot_var_stability()` to plot variable stability across outer 
+folds
+* Add `finalCV = NA` option which skips fitting the final model completely. This
+gives a useful speed boost if performance metrics are all that is needed.
+* `model` argument in `outercv` now prefers a character value instead of a 
+function for the model to be fitted
+* Bugfixes
+
+# nestedcv 0.4.6
+###### 07/12/2022
+* Add check model exists in `outercv`
+* Perform final model fit first in `nestcv.train` which improves error detection
+in caret. So `nestcv.train` can be run in multicore mode straightaway.
+* Removes predictors with variance = 0
+* Fix bug caused by filter p-values = NA
+
 # nestedcv 0.4.4
 ###### 05/12/2022
 * Add confusion matrix to results summaries for classification

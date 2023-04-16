@@ -1,6 +1,6 @@
 Package: nestedcv
 Title: Nested Cross-Validation with 'glmnet' and 'caret'
-Version: 0.4.4
+Version: 0.6.1
 Authors@R: 
     c(person(given = "Myles",family = "Lewis",
     role = c("aut", "cre"),
@@ -11,7 +11,6 @@ Authors@R:
     comment = c(ORCID = "0000-0002-5929-6585")),
     person(given = "Katriona",family = "Goldmann",
     role = c("aut"),
-    email = "k.goldmann@qmul.ac.uk",
     comment = c(ORCID = "0000-0002-9073-6323")))
 Maintainer: Myles Lewis <myles.lewis@qmul.ac.uk>
 BugReports: https://github.com/myles-lewis/nestedcv/issues
@@ -20,17 +19,18 @@ Description: Implements nested k*l-fold cross-validation for lasso and elastic-n
 Language: en-gb
 License: MIT + file LICENSE
 Encoding: UTF-8
-Imports: Boruta, caret, CORElearn, data.table, doParallel, foreach,
-        ggplot2, glmnet, hsstan, matrixStats, matrixTests, methods,
-        parallel, pROC, randomForest, RcppEigen, Rfast, rlang,
-        SuperLearner
+Imports: caret, data.table, doParallel, foreach, ggplot2, glmnet,
+        matrixStats, matrixTests, methods, parallel, pROC, reshape2,
+        Rfast, rlang
 RoxygenNote: 7.2.1
-Suggests: mda, rmarkdown, knitr
+Suggests: Boruta, CORElearn, fastshap, gbm, ggbeeswarm, ggpubr, hsstan,
+        mda, mlbench, randomForest, ranger, RcppEigen, rmarkdown,
+        knitr, SuperLearner
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2022-12-05 11:53:03 UTC; myles
+Packaged: 2023-04-16 07:57:42 UTC; myles
 Author: Myles Lewis [aut, cre] (<https://orcid.org/0000-0001-9365-5345>),
   Athina Spiliopoulou [aut] (<https://orcid.org/0000-0002-5929-6585>),
   Katriona Goldmann [aut] (<https://orcid.org/0000-0002-9073-6323>)
 Repository: CRAN
-Date/Publication: 2022-12-05 12:30:02 UTC
+Date/Publication: 2023-04-16 08:20:03 UTC

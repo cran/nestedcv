@@ -27,16 +27,17 @@ An object of class \code{hsstan}
 }
 \description{
 This function applies a cross-validation (CV) procedure for training Bayesian
-models with hierarchical shrinkage priors using the \code{hsstan} package.
-The function allows the option of embedded filtering of predictors for
-feature selection within the CV loop. Within each training fold, an optional
+models with hierarchical shrinkage priors using the \code{hsstan} package. The
+function allows the option of embedded filtering of predictors for feature
+selection within the CV loop. Within each training fold, an optional
 filtering of predictors is performed, followed by fitting of an \code{hsstsan}
 model. Predictions on the testing folds are brought back together and error
-estimation/ accuracy determined. The default is 10-fold CV.
-The function is implemented within the \code{nestedcv} package. The \code{hsstan}
-models do not require tuning of meta-parameters and therefore only a single
-CV procedure is needed to evaluate performance. This is implemented using the
-\code{outer} CV procedure in the \code{nestedcv} package.
+estimation/ accuracy determined. The default is 10-fold CV. The function is
+implemented within the \code{nestedcv} package. The \code{hsstan} models do not require
+tuning of meta-parameters and therefore only a single CV procedure is needed
+to evaluate performance. This is implemented using the \code{outer} CV procedure
+in the \code{nestedcv} package. Supports binary outcome (logistic regression) or
+continuous outcome. Multinomial models are currently not supported.
 }
 \examples{
 \donttest{
@@ -51,6 +52,7 @@ colnames(dt) <- c("marker1", "marker2", "marker3", "marker4")
 dt <- as.data.frame(apply(dt, 2, scale))
 dt$outcome.cont <- -3 + 0.5 * dt$marker1 + 2 * dt$marker2 + rnorm(nrow(dt), 0, 2)
 
+library(hsstan)
 # unpenalised covariates: always retain in the prediction model
 uvars <- "marker1"
 # penalised covariates: coefficients are drawn from hierarchical shrinkage
@@ -61,7 +63,7 @@ pvars <- c("marker2", "marker3", "marker4") # penalised covariates
 # recommend 4 chains, warmup 1000, iter 2000 in practice
 oldopt <- options(mc.cores = 2)
 res.cv.hsstan <- outercv(y = dt$outcome.cont, x = dt[, c(uvars, pvars)],
-                         model = model.hsstan,
+                         model = "model.hsstan",
                          filterFUN = lm_filter,
                          filter_options = list(force_vars = uvars,
                                                nfilter = 2,
@@ -76,8 +78,7 @@ res.cv.hsstan$final_fit
 # view covariates selected by the univariate filter
 res.cv.hsstan$final_vars
 
-# load hsstan package to examine the Bayesian model
-library(hsstan)
+# use hsstan package to examine the Bayesian model
 sampler.stats(res.cv.hsstan$final_fit)
 print(projsel(res.cv.hsstan$final_fit), digits = 4) # adding marker2
 options(oldopt)

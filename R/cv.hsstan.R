@@ -4,16 +4,17 @@
 #' hsstan model for cross-validation
 #'
 #' This function applies a cross-validation (CV) procedure for training Bayesian
-#' models with hierarchical shrinkage priors using the `hsstan` package.
-#' The function allows the option of embedded filtering of predictors for
-#' feature selection within the CV loop. Within each training fold, an optional
+#' models with hierarchical shrinkage priors using the `hsstan` package. The
+#' function allows the option of embedded filtering of predictors for feature
+#' selection within the CV loop. Within each training fold, an optional
 #' filtering of predictors is performed, followed by fitting of an `hsstsan`
 #' model. Predictions on the testing folds are brought back together and error
-#' estimation/ accuracy determined. The default is 10-fold CV.
-#' The function is implemented within the `nestedcv` package. The `hsstan`
-#' models do not require tuning of meta-parameters and therefore only a single
-#' CV procedure is needed to evaluate performance. This is implemented using the
-#' `outer` CV procedure in the `nestedcv` package.
+#' estimation/ accuracy determined. The default is 10-fold CV. The function is
+#' implemented within the `nestedcv` package. The `hsstan` models do not require
+#' tuning of meta-parameters and therefore only a single CV procedure is needed
+#' to evaluate performance. This is implemented using the `outer` CV procedure
+#' in the `nestedcv` package. Supports binary outcome (logistic regression) or
+#' continuous outcome. Multinomial models are currently not supported.
 #'
 #' @param y Response vector. For classification this should be a factor.
 #' @param x Matrix of predictors
@@ -30,7 +31,6 @@
 #' @return An object of class `hsstan`
 #'
 #' @author Athina Spiliopoulou
-#' @importFrom hsstan hsstan
 #' @importFrom data.table as.data.table
 #' @examples
 #' \donttest{
@@ -45,6 +45,7 @@
 #' dt <- as.data.frame(apply(dt, 2, scale))
 #' dt$outcome.cont <- -3 + 0.5 * dt$marker1 + 2 * dt$marker2 + rnorm(nrow(dt), 0, 2)
 #' 
+#' library(hsstan)
 #' # unpenalised covariates: always retain in the prediction model
 #' uvars <- "marker1"
 #' # penalised covariates: coefficients are drawn from hierarchical shrinkage
@@ -55,7 +56,7 @@
 #' # recommend 4 chains, warmup 1000, iter 2000 in practice
 #' oldopt <- options(mc.cores = 2)
 #' res.cv.hsstan <- outercv(y = dt$outcome.cont, x = dt[, c(uvars, pvars)],
-#'                          model = model.hsstan,
+#'                          model = "model.hsstan",
 #'                          filterFUN = lm_filter,
 #'                          filter_options = list(force_vars = uvars,
 #'                                                nfilter = 2,
@@ -70,8 +71,7 @@
 #' # view covariates selected by the univariate filter
 #' res.cv.hsstan$final_vars
 #' 
-#' # load hsstan package to examine the Bayesian model
-#' library(hsstan)
+#' # use hsstan package to examine the Bayesian model
 #' sampler.stats(res.cv.hsstan$final_fit)
 #' print(projsel(res.cv.hsstan$final_fit), digits = 4) # adding marker2
 #' options(oldopt)
@@ -84,18 +84,25 @@
 #' @export
 #'
 model.hsstan <- function(y, x, unpenalized = NULL, ...) {
+  if (!requireNamespace("hsstan", quietly = TRUE)) {
+    stop("Package 'hsstan' must be installed", call. = FALSE)
+  }
 
-    ## reformat outcome and predictors to work with hsstan
+  ## reformat outcome and predictors to work with hsstan
+  if (!is.numeric(y)) {
     if(nlevels(y) == 2) {
-        ## for binary outcomes convert factor to numeric (0, 1)
-        ## need to keep names of factor levels for caret confusion matrix (the
-        ## factor levels are applied back to the outcome when we use predict)
-        y.levels <- levels(y)
-        y <- as.integer(y) - 1
-        family = "binomial"
+      ## for binary outcomes convert factor to numeric (0, 1)
+      ## need to keep names of factor levels for caret confusion matrix (the
+      ## factor levels are applied back to the outcome when we use predict)
+      y.levels <- levels(y)
+      y <- as.integer(y) - 1
+      family = "binomial"
     } else {
-        family = "gaussian"
+      stop("multinomial models are not supported")
     }
+  } else {
+    family = "gaussian"
+  }
 
     dt <- as.data.table(cbind(y, x))
 
@@ -109,7 +116,7 @@ model.hsstan <- function(y, x, unpenalized = NULL, ...) {
     }
 
     ## fit the model
-    fit <- hsstan(x = dt, covs.model = covs.model, penalized = penalized,
+    fit <- hsstan::hsstan(x = dt, covs.model = covs.model, penalized = penalized,
                   family = family, ...)
 
     if(exists("y.levels")) {
@@ -142,14 +149,13 @@ model.hsstan <- function(y, x, unpenalized = NULL, ...) {
 #'   each sample.
 #'
 #' @author Athina Spiliopoulou
-#' @importFrom hsstan posterior_predict
 #' @export
 #'
 predict.hsstan <- function(object, newdata = NULL, type = NULL, ...) {
     if (object$family[1] == "gaussian") {
-        preds <- colMeans(posterior_predict(object, newdata = newdata, ...))
+        preds <- colMeans(hsstan::posterior_predict(object, newdata = newdata, ...))
     } else if (object$family[1] == "binomial") {
-        probs <- colMeans(posterior_predict(object, newdata = newdata,
+        probs <- colMeans(hsstan::posterior_predict(object, newdata = newdata,
                                             transform = TRUE, ...))
         if(is.null(type)) {
             # convert to binary

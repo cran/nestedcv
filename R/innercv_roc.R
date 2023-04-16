@@ -12,7 +12,7 @@
 #' @param ... Other arguments passed to [pROC::roc]
 #' @return `"roc"` object, see [pROC::roc]
 #' @examples
-#' 
+#' \donttest{
 #' ## Example binary classification problem with P >> n
 #' x <- matrix(rnorm(150 * 2e+04), 150, 2e+04)  # predictors
 #' y <- factor(rbinom(150, 1, 0.5))  # binary response
@@ -57,7 +57,7 @@
 #' legend('bottomright', legend = c("Nested CV", "Left-out inner CV folds", 
 #'                                  "Test partition, non-nested filtering"), 
 #'        col = c("black", "blue", "red"), lty = 1, lwd = 2, bty = "n")
-#'
+#' }
 #' @export
 #' 
 innercv_roc <- function(x, direction = "<", ...) {
@@ -206,31 +206,23 @@ train_preds <- function(x) {
 #' x <- iris[, 1:4]
 #' y <- iris[, 5]
 #' 
-#' library(randomForest)
-#' fit <- outercv(y, x, model = randomForest,
-#'                outer_train_predict = TRUE,
-#'                n_outer_folds = 3,
-#'                cv.cores = 1)
-#' summary(fit)
-#' train_summary(fit)
-#' 
-#' fit2 <- nestcv.glmnet(y, x,
+#' fit <- nestcv.glmnet(y, x,
 #'                      family = "multinomial",
 #'                      alpha = 1,
 #'                      outer_train_predict = TRUE,
 #'                      n_outer_folds = 3)
-#' summary(fit2)
-#' innercv_summary(fit2)
-#' train_summary(fit2)
+#' summary(fit)
+#' innercv_summary(fit)
+#' train_summary(fit)
 #' 
-#' fit3 <- nestcv.train(y, x,
+#' fit2 <- nestcv.train(y, x,
 #'                     model="svm",
 #'                     outer_train_predict = TRUE,
 #'                     n_outer_folds = 3,
 #'                     cv.cores = 2)
-#' summary(fit3)
-#' innercv_summary(fit3)
-#' train_summary(fit3)
+#' summary(fit2)
+#' innercv_summary(fit2)
+#' train_summary(fit2)
 #' }
 #' @export
 train_summary <- function(x) {

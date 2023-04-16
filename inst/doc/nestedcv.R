@@ -1,7 +1,7 @@
 ## ----setup, include = FALSE---------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  warning = FALSE
 )
 library(nestedcv)
 library(pROC)
@@ -129,7 +129,7 @@ knitr::include_graphics("plot_cva.png")
 knitr::include_graphics("roc.png")
 
 ## ----eval = FALSE-------------------------------------------------------------
-#  boxplot_model(res.rtx, data.rtx, ylab = "VST")
+#  boxplot_model(res.rtx, ylab = "VST")
 
 ## ---- out.width='70%', fig.align="center", echo=FALSE-------------------------
 knitr::include_graphics("boxplot.png")
@@ -169,7 +169,7 @@ y <- factor(rbinom(150, 1, 0.2))  # imbalanced binary response
 table(y)
 
 ## first 30 parameters are weak predictors
-x[, 1:30] <- rnorm(150 * 30, 0, 1) + as.numeric(y)*0.5
+x[, 1:30] <- rnorm(150 * 30, 0, 1) + as.numeric(y)*0.7
 
 ## -----------------------------------------------------------------------------
 out <- randomsample(y, x)
@@ -180,7 +180,7 @@ table(y2)
 ## Nested CV glmnet with unnested balancing by random oversampling on
 ## whole dataset
 fit1 <- nestcv.glmnet(y2, x2, family = "binomial", alphaSet = 1,
-                      n_outer_folds = 3,
+                      n_outer_folds = 4,
                       cv.cores=2,
                       filterFUN = ttest_filter)
 fit1$summary
@@ -194,7 +194,7 @@ table(y2)
 ## Nested CV glmnet with unnested balancing by random undersampling on
 ## whole dataset
 fit1b <- nestcv.glmnet(y2, x2, family = "binomial", alphaSet = 1,
-                       n_outer_folds = 3,
+                       n_outer_folds = 4,
                        cv.cores=2,
                        filterFUN = ttest_filter)
 fit1b$summary
@@ -207,7 +207,7 @@ table(y2)
 
 ## Nested CV glmnet with unnested balancing by SMOTE on whole dataset
 fit2 <- nestcv.glmnet(y2, x2, family = "binomial", alphaSet = 1,
-                      n_outer_folds = 3,
+                      n_outer_folds = 4,
                       cv.cores=2,
                       filterFUN = ttest_filter)
 fit2$summary
@@ -215,22 +215,36 @@ fit2$summary
 ## -----------------------------------------------------------------------------
 ## Nested CV glmnet with nested balancing by random oversampling
 fit3 <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
-                      n_outer_folds = 3,
+                      n_outer_folds = 4,
                       cv.cores=2,
                       balance = "randomsample",
                       filterFUN = ttest_filter)
 fit3$summary
 
 ## -----------------------------------------------------------------------------
+## Nested CV glmnet with weights
+w <- weight(y)
+table(w)
+
+fit4 <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
+                      n_outer_folds = 4,
+                      cv.cores=2,
+                      weights = w,
+                      filterFUN = ttest_filter)
+fit4$summary
+
+## -----------------------------------------------------------------------------
 plot(fit1$roc, col='green')
 lines(fit1b$roc, col='red')
 lines(fit2$roc, col='blue')
 lines(fit3$roc)
+lines(fit4$roc, col='purple')
 legend('bottomright', legend = c("Unnested random oversampling", 
                                  "Unnested SMOTE",
                                  "Unnested random undersampling",
-                                 "Nested balancing"), 
-       col = c("green", "blue", "red", "black"), lty = 1, lwd = 2, bty = "n", cex=0.8)
+                                 "Nested random oversampling",
+                                 "Nested glmnet with weights"), 
+       col = c("green", "blue", "red", "black", "purple"), lty = 1, lwd = 2, bty = "n", cex=0.8)
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  balance <- function(y, x, ...) {
@@ -274,95 +288,6 @@ legend('bottomright', legend = c("Unnested random oversampling",
 #  
 #  # for nestcv.train object
 #  preds <- predict(ncv, newdata = data.rtx)
-
-## -----------------------------------------------------------------------------
-
-# specify options for running the code
-nfolds <- 3
-
-# specify number of cores for parallelising computation
-# the product of cv.cores and mc.cores will be used in total
-# number of cores for parallelising over CV folds
-cv.cores <- 1
-# number of cores for parallelising hsstan sampling
-# to pass CRAN package checks we need to create object oldopt
-# in the end we reset options to the old configuration
-oldopt <- options(mc.cores = 2)
-
-# load iris dataset and simulate a continuous outcome
-data(iris)
-dt <- iris[, 1:4]
-colnames(dt) <- c("marker1", "marker2", "marker3", "marker4")
-dt <- as.data.frame(apply(dt, 2, scale))
-dt$outcome.cont <- -3 + 0.5 * dt$marker1 + 2 * dt$marker2 + rnorm(nrow(dt), 0, 2)
-
-# unpenalised covariates: always retain in the prediction model
-uvars <- "marker1"
-# penalised covariates: coefficients are drawn from hierarchical shrinkage prior
-pvars <- c("marker2", "marker3", "marker4") # penalised covariates
-# run cross-validation with univariate filter and hsstan
-res.cv.hsstan <- outercv(y = dt$outcome.cont, x = dt[, c(uvars, pvars)],
-                         model = model.hsstan,
-                         filterFUN = lm_filter,
-                         filter_options = list(force_vars = uvars,
-                                               nfilter = 2,
-                                               p_cutoff = NULL,
-                                               rsq_cutoff = 0.9),
-                         n_outer_folds = nfolds, chains = 2,
-                         cv.cores = cv.cores,
-                         unpenalized = uvars, warmup = 100, iter = 200)
-
-## -----------------------------------------------------------------------------
-summary(res.cv.hsstan)
-
-library(hsstan)
-sampler.stats(res.cv.hsstan$final_fit)
-print(projsel(res.cv.hsstan$final_fit), digits = 4)  # adding marker2
-options(oldopt)  # reset options
-
-## -----------------------------------------------------------------------------
-# sigmoid function
-sigmoid <- function(x) {1 / (1 + exp(-x))}
-
-# specify options for running the code
-nfolds <- 3
-cv.cores <- 1
-oldopt <- options(mc.cores = 2)
-
-# load iris dataset and create a binary outcome
-set.seed(267)
-data(iris)
-dt <- iris[, 1:4]
-colnames(dt) <- c("marker1", "marker2", "marker3", "marker4")
-dt <- as.data.frame(apply(dt, 2, scale))
-rownames(dt) <- paste0("sample", c(1:nrow(dt)))
-dt$outcome.bin <- sigmoid(0.5 * dt$marker1 + 2 * dt$marker2) > runif(nrow(dt))
-dt$outcome.bin <- factor(dt$outcome.bin)
-
-# unpenalised covariates: always retain in the prediction model
-uvars <- "marker1"
-# penalised covariates: coefficients are drawn from hierarchical shrinkage prior
-pvars <- c("marker2", "marker3", "marker4") # penalised covariates
-# run cross-validation with univariate filter and hsstan
-res.cv.hsstan <- outercv(y = dt$outcome.bin,
-                         x = as.matrix(dt[, c(uvars, pvars)]),
-                         model = model.hsstan,
-                         filterFUN = ttest_filter,
-                         filter_options = list(force_vars = uvars,
-                                               nfilter = 2,
-                                               p_cutoff = NULL,
-                                               rsq_cutoff = 0.9),
-                         n_outer_folds = nfolds, chains = 2,
-                         cv.cores = cv.cores,
-                         unpenalized = uvars, warmup = 100, iter = 200)
-
-## -----------------------------------------------------------------------------
-summary(res.cv.hsstan)
-
-# examine the Bayesian model
-sampler.stats(res.cv.hsstan$final_fit)
-print(projsel(res.cv.hsstan$final_fit), digits = 4)  # adding marker2
-options(oldopt)  # reset options
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  parallel::detectCores(logical = FALSE)

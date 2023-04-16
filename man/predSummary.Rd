@@ -14,12 +14,17 @@ probabilities for classification to calculate ROC AUC}
 \value{
 An object of class 'predSummary'. For classification a list is
 returned containing the confusion matrix table and a vector containing
-accuracy and balanced accuracy for classification, ROC AUC for binary
+accuracy and balanced accuracy for classification, ROC AUC for
 classification. For regression a vector containing RMSE and R^2 is
 returned.
 }
 \description{
 Quick function to calculate performance metrics: confusion matrix, accuracy
 and balanced accuracy for classification; ROC AUC for binary classification;
-RMSE and R^2 for regression.
+RMSE and R^2 for regression. Multi-class AUC is returned for multinomial
+classification.
+}
+\details{
+For multinomial classification, multi-class AUC as defined by Hand and Till
+is calculated using \code{\link[pROC:multiclass]{pROC::multiclass.roc()}}.
 }
