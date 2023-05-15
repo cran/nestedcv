@@ -123,30 +123,24 @@ using the model. `nestedcv` provides `pred_nestcv_glmnet` which is a wrapper
 function for binary classification or regression with `nestcv.glmnet` fitted
 models.
 
-```{r, fig.width = 9}
+```{r}
 library(fastshap)
-library(ggplot2)
 
 # Generate SHAP values using fastshap::explain
 # Only using 5 repeats here for speed, but recommend higher values of nsim
 sh <- explain(fit, X=x, pred_wrapper = pred_nestcv_glmnet, nsim = 5)
 
 # Plot overall variable importance
-p1 <- autoplot(sh)
-
-# Overlay main direction
-p2 <- plot_shap_bar(sh, x)
-
-ggpubr::ggarrange(p1, p2, ncol = 2)
+plot_shap_bar(sh, x)
 ```
 
-The `autoplot` function from `fastshap` gives a quick barplot. `plot_shap_bar`
-from `nestedcv` overlays colour for the direction of the main effect of each
-variable on the model, based on correlating the value of each variable against
-the SHAP value to see if the overall correlation for that variable is positive
-or negative. For regression models such as glmnet this corresponds to the sign
-of each coefficient. For more complex models with interactions the direction of
-effect may be variable and non-linear.
+`plot_shap_bar()` ranks predictors in terms of variable importance calculated as
+mean absolute SHAP value. The plot also overlays colour for the direction of the
+main effect of each variable on the model, based on correlating the value of
+each variable against the SHAP value to see if the overall correlation for that
+variable is positive or negative. For regression models such as glmnet this
+corresponds to the sign of each coefficient. For more complex models with
+interactions the direction of effect may be variable and non-linear.
 
 Note that these SHAP plots only show the final fitted model (on the whole data),
 whereas the variable stability plots examine models across the outer CV folds as
@@ -163,7 +157,8 @@ plot_shap_beeswarm(sh, x, size = 1)
 
 `size` can be set to control the size of points. `cex` controls the amount of
 overlap of the beeswarm. `scheme` controls the colour scheme as a vector of 3
-colours.
+colours. Alternatively try the [shapviz](https://cran.r-project.org/package=shapviz) 
+package.
 
 The process for a caret model fitted using `nestedcv` is similar. Use the
 `pred_train` wrapper when calling `explain()`.
@@ -191,6 +186,7 @@ extended.
 As a toy example, we show the iris dataset which has 3 classes.
 
 ```{r, fig.width = 9, fig.height = 3.5}
+library(ggplot2)
 data("iris")
 dat <- iris
 y <- dat$Species
@@ -238,8 +234,13 @@ data. *Bioinformatics Advances*. https://doi.org/10.1093/bioadv/vbad048
 
 ### References
 
-Brandon Greenwell. [fastshap](https://cran.r-project.org/package=fastshap): Fast Approximate Shapley Values
+Brandon Greenwell. [fastshap](https://cran.r-project.org/package=fastshap): Fast
+Approximate Shapley Values
 
-Lundberg SM & Lee SI (2017). A Unified Approach to Interpreting Model Predictions. *Advances in Neural Information Processing Systems* 30; 4768–4777. http://papers.nips.cc/ paper/7062-a-unified-approach-to-interpreting-model-predictions.pdf
+Lundberg SM & Lee SI (2017). A Unified Approach to Interpreting Model
+Predictions. *Advances in Neural Information Processing Systems* 30; 4768–4777.
+http://papers.nips.cc/paper/7062-a-unified-approach-to-interpreting-model-predictions.pdf
 
-Lundberg SM et al (2020). From Local Explanations to Global Understanding with Explainable AI for Trees. *Nat Mach Intell* 2020; 2(1): 56-67. https://arxiv.org/abs/1905.04610
+Lundberg SM et al (2020). From Local Explanations to Global Understanding with
+Explainable AI for Trees. *Nat Mach Intell* 2020; 2(1): 56-67.
+https://arxiv.org/abs/1905.04610

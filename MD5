@@ -1,7 +1,7 @@
-f58609164abe32b22d9a96bba62a94a0 *DESCRIPTION
+8d23fe8fef10a9fc9a5f4fc70f724cce *DESCRIPTION
 d89043936a7043a6af06851c5b5caa68 *LICENSE
 ccbf84ad6f83eb8817df085b9050ca43 *NAMESPACE
-b4d54018d31a4a9085424e4cc73b29f3 *NEWS.md
+4aa8cbf2b0ab02f49c6fcd03e3f7e3ab *NEWS.md
 a8d43104c5004412c85c178a39e3b926 *R/boot_filter.R
 490afe03cf857305888b806fde5d14aa *R/checkxy.R
 6810dffdd4599f74e7476626a339a31f *R/class_balance.R
@@ -10,7 +10,7 @@ ef42de353b0f8c68402d973bd5c9b0be *R/cv.hsstan.R
 cf778e7e5d79580d92e706e021c3ac08 *R/directionality.R
 1febe4681bb8e41d2ec771a3599b641e *R/filters.R
 96782ead2864c9f166862f05ba5acb41 *R/innercv_roc.R
-f6d1bde7778ac99b7822aec61ba184bf *R/nest_filter_balance.R
+41029d474c81d8378b684cc9bc057abf *R/nest_filter_balance.R
 104ee6a84b24c297ea16f8a497ec123a *R/nestcv.train.R
 d538f5795728f527e4ca9ea2c5741946 *R/nestcv_SuperLearner.R
 dc3f9e7e6126aa47c9e594d9cbedd352 *R/nestedcv.R
@@ -18,7 +18,7 @@ dc3f9e7e6126aa47c9e594d9cbedd352 *R/nestedcv.R
 0458cc80d2b90724c4b2b383b6c3acd4 *R/plots.R
 c6d929536c4aa6a82777b4b09b489e8e *R/predSummary.R
 96ec57ff4e76f13e8e32c8ef040a9aeb *R/randomsample.R
-c5c2f01fecf83e4238464b9e4ddc8aeb *R/shap.R
+915107785a33d38bd75e2644819ea6f0 *R/shap.R
 9946008f7b3c41a710c424a0852d39dd *R/smote.R
 6e4daf97d711d33bf907f949925aa0fc *R/utils.R
 7ec3cad15fd6ffec5b1fa9f93767c117 *R/varImp.R
@@ -26,13 +26,13 @@ baf76fa84228da48a22fdda43770e2b1 *README.md
 77415d8d10e021a3347c3b094a3b39e4 *build/vignette.rds
 5863f66ee1ed2c462ffe25cf46b99f92 *inst/doc/nestedcv.R
 d31e149ad53db9bc3793080cfa83ffb4 *inst/doc/nestedcv.Rmd
-0e80a97f505a1231108497511a1858a0 *inst/doc/nestedcv.html
+da5413a5f1e5dbe1407f46c42bc3fde4 *inst/doc/nestedcv.html
 88bee932c1aae17c9409fe44f909ce7b *inst/doc/nestedcv_hsstan.R
 e334b3950120e23d27f528adcc02fab0 *inst/doc/nestedcv_hsstan.Rmd
 aa44a4aaf05d15637c86a1171d0ca61c *inst/doc/nestedcv_hsstan.html
-cbb751b2877a8335fa5efa0dcf3f7584 *inst/doc/nestedcv_shap.R
-e2b4f4de61c961309e0cb397bd8ed2b1 *inst/doc/nestedcv_shap.Rmd
-564815a79f4a71b19c950b1fb4f68a77 *inst/doc/nestedcv_shap.html
+3f514a1cb75330ee7be05c878ee309e6 *inst/doc/nestedcv_shap.R
+496e44cb30686bbe4962cbc8d7e688ed *inst/doc/nestedcv_shap.Rmd
+b28af2b17dfd6e0a22af1ba6e2625190 *inst/doc/nestedcv_shap.html
 f92a894ab4461759c24deb01c6a00990 *man/anova_filter.Rd
 c174e1795761fc40835d762bdd6391a8 *man/barplot_var_stability.Rd
 e4c0c22db4b973c1f31d6518e0729673 *man/boot_filter.Rd
@@ -70,7 +70,7 @@ cebe6d59db3ae411352d79cd51751854 *man/plot_shap_bar.Rd
 e44f91778b63e92043dc1ce2596a8b2d *man/plot_varImp.Rd
 e4b41a1546f2ecd83fb3886b35198807 *man/plot_var_stability.Rd
 0424f2610ed939fd6c3c6771a59aa70f *man/predSummary.Rd
-c9978ee04e1fb1ac2b36b44355890f32 *man/pred_nestcv_glmnet.Rd
+9f9fffe30212580f92288660f167fd7b *man/pred_nestcv_glmnet.Rd
 31447ce7a617790dd98a12ba2fedc5c6 *man/predict.hsstan.Rd
 d5f17bfd95a21089d4c29894586976c7 *man/predict.nestcv.glmnet.Rd
 db1d77f98ed42b0d29a5af7b22d44704 *man/randomsample.Rd
@@ -93,7 +93,7 @@ cdb0f469ea0662f03ef4c77e83e17727 *vignettes/boxplot.png
 77b5a8d15d7a4c5c2270a5acea49e74d *vignettes/fig2.svg
 d31e149ad53db9bc3793080cfa83ffb4 *vignettes/nestedcv.Rmd
 e334b3950120e23d27f528adcc02fab0 *vignettes/nestedcv_hsstan.Rmd
-e2b4f4de61c961309e0cb397bd8ed2b1 *vignettes/nestedcv_shap.Rmd
+496e44cb30686bbe4962cbc8d7e688ed *vignettes/nestedcv_shap.Rmd
 763a5f2c3e0ec17b0195f8542b30653e *vignettes/plot_alpha_lam.png
 aa30f64bba549fbf7acfdb28e9bc3169 *vignettes/plot_cva.png
 b96eb3b909038bb11a55c215cfded2a9 *vignettes/roc.png

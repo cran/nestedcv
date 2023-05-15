@@ -36,21 +36,15 @@ ggpubr::ggarrange(p1, p2, ncol=2)
 #  # change bubble colour scheme
 #  p1 + scale_fill_manual(values=c("orange", "green3"))
 
-## ---- fig.width = 9-----------------------------------------------------------
+## -----------------------------------------------------------------------------
 library(fastshap)
-library(ggplot2)
 
 # Generate SHAP values using fastshap::explain
 # Only using 5 repeats here for speed, but recommend higher values of nsim
 sh <- explain(fit, X=x, pred_wrapper = pred_nestcv_glmnet, nsim = 5)
 
 # Plot overall variable importance
-p1 <- autoplot(sh)
-
-# Overlay main direction
-p2 <- plot_shap_bar(sh, x)
-
-ggpubr::ggarrange(p1, p2, ncol = 2)
+plot_shap_bar(sh, x)
 
 ## -----------------------------------------------------------------------------
 # Plot beeswarm plot
@@ -67,6 +61,7 @@ sh <- explain(fit, X=x, pred_wrapper = pred_train, nsim = 5)
 plot_shap_beeswarm(sh, x, size = 1)
 
 ## ---- fig.width = 9, fig.height = 3.5-----------------------------------------
+library(ggplot2)
 data("iris")
 dat <- iris
 y <- dat$Species
