@@ -188,11 +188,13 @@ var_stability.nestcv.train <- function(x,
 #' @param final Logical whether to restrict variables to only those which ended
 #'   up in the final fitted model or to include all variables selected across
 #'   all outer folds.
-#' @param top Limits number of variables plotted. Ignored if `final = TRUE`.
+#' @param top Limits number of variables plotted. Set to `NULL` to plot all
+#'   variables.
 #' @param direction Integer controlling plotting of directionality for binary or
 #'   regression models. `0` means no directionality is shown, `1` means
 #'   directionality is overlaid as a colour, `2` means directionality is
-#'   reflected in the sign of variable importance.
+#'   reflected in the sign of variable importance. Not available for multiclass
+#'   caret models.
 #' @param dir_labels Character vector for controlling the legend when
 #'   `direction = 1`
 #' @param breaks Vector of continuous breaks for legend colour/size
@@ -211,7 +213,7 @@ var_stability.nestcv.train <- function(x,
 #' @export
 plot_var_stability <- function(x,
                                final = TRUE,
-                               top = 25,
+                               top = NULL,
                                direction = 0,
                                dir_labels = NULL,
                                breaks = NULL,
@@ -236,21 +238,25 @@ plot_var_stability <- function(x,
       fv <- fv[fv %in% rownames(df)]
     }
     df <- df[rownames(df) %in% fv, ]
-  } else {
-    top <- min(top, nrow(df))
-    df <- df[1:top, ]
   }
-  xtitle <- if (!percent & inherits(x, "nestcv.glmnet")) {
-    "Coefficient"
-  } else "Variable importance"
+  if (!is.null(top) && top < nrow(df)) df <- df[1:top, ]
+  if (!percent & inherits(x, "nestcv.glmnet")) {
+    if (direction == 1) {
+      df$mean <- abs(df$mean)
+      xtitle <- "|coefficient|"
+    } else xtitle <- "Coefficient"
+  } else xtitle <- "Variable importance"
   if (is.null(breaks)) {
     nof <- length(x$outer_folds)
     pr <- unique(round(pretty(c(1, nof), n = 4)))
     breaks <- setNames(c(pr, nof+1), c(as.character(pr), "all"))
   }
   
-  if ((!is.numeric(x$y) & nlevels(x$y) != 2) | !percent) direction <- 0
-  if (direction == 2 && "sign" %in% colnames(df)) {
+  if (direction != 0 && !"direction" %in% colnames(df)) {
+    message("Missing directionality information")
+    direction <- 0
+  }
+  if (direction == 2 && "sign" %in% colnames(df) && percent) {
     df$mean <- df$mean * df$sign
   }
   if (direction > 0 && !is.null(dir_labels)) {
@@ -264,7 +270,7 @@ plot_var_stability <- function(x,
                          xmax = .data$mean + .data$sem), height = 0.2) +
       geom_point(aes(size = .data$frequency,
                      fill = .data$direction), shape = 21) +
-      scale_fill_manual(values=c("royalblue", "red")) +
+      scale_fill_manual(values=c("royalblue", "red"), na.translate = FALSE) +
       scale_radius(breaks = breaks,
                    limits = c(1, NA)) +
       (if (min(df$mean) > 0) xlim(0, NA)) +
@@ -302,11 +308,13 @@ plot_var_stability <- function(x,
 #' @param final Logical whether to restrict variables to only those which ended
 #'   up in the final fitted model or to include all variables selected across
 #'   all outer folds.
-#' @param top Limits number of variables plotted. Ignored if `final = TRUE`.
+#' @param top Limits number of variables plotted. Set to `NULL` to plot all
+#'   variables.
 #' @param direction Integer controlling plotting of directionality for binary or
 #'   regression models. `0` means no directionality is shown, `1` means
 #'   directionality is overlaid as a colour, `2` means directionality is
-#'   reflected in the sign of variable importance.
+#'   reflected in the sign of variable importance. Not available for multiclass
+#'   caret models.
 #' @param dir_labels Character vector for controlling the legend when
 #'   `direction = 1`
 #' @param breaks Vector of continuous breaks for legend colour/size
@@ -325,7 +333,7 @@ plot_var_stability <- function(x,
 #' @export
 barplot_var_stability <- function(x,
                                   final = TRUE,
-                                  top = 25,
+                                  top = NULL,
                                   direction = 0,
                                   dir_labels = NULL,
                                   breaks = NULL,
@@ -350,15 +358,19 @@ barplot_var_stability <- function(x,
       fv <- fv[fv %in% rownames(df)]
     }
     df <- df[rownames(df) %in% fv, ]
-  } else {
-    top <- min(top, nrow(df))
-    df <- df[1:top, ]
   }
-  xtitle <- if (!percent & inherits(x, "nestcv.glmnet")) {
-    "Coefficient"
-  } else "Variable importance"
+  if (!is.null(top) && top < nrow(df)) df <- df[1:top, ]
+  if (!percent & inherits(x, "nestcv.glmnet")) {
+    if (direction == 1) {
+      df$mean <- abs(df$mean)
+      xtitle <- "|coefficient|"
+    } else xtitle <- "Coefficient"
+  } else xtitle <- "Variable importance"
   
-  if ((!is.numeric(x$y) & nlevels(x$y) != 2)) direction <- 0
+  if (direction != 0 && !"direction" %in% colnames(df)) {
+    message("Missing directionality information")
+    direction <- 0
+  }
   if (direction == 2 && "sign" %in% colnames(df) && percent) {
     df$mean <- df$mean * df$sign
   }
@@ -382,7 +394,7 @@ barplot_var_stability <- function(x,
       geom_col(aes(fill = .data$direction), width = 0.75) +
       geom_errorbarh(aes(xmin = .data$mean - .data$sem,
                          xmax = .data$mean + .data$sem), height = 0.3) +
-      scale_fill_manual(values=c("royalblue", "red")) +
+      scale_fill_manual(values=c("royalblue", "red"), na.translate = FALSE) +
       scale_y_discrete(limits=rev) + ylab("") +
       xlab(xtitle) +
       theme_minimal() +

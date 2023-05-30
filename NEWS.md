@@ -1,6 +1,19 @@
 News
 =====
 
+# nestedcv 0.6.4
+###### 29/05/2023
+* Fix: ensure `nfolds` for final CV equals `n_inner_folds` in `nestcv.glmnet()`
+* Add argument `pass_outer_folds` to both `nestcv.glmnet` and `nestcv.train`: 
+this enables passing of passing of outer CV fold indices stored in `outer_folds` 
+to the final round of CV. Note this can only work if `n_outer_folds` = number of 
+inner CV folds and balancing is not applied so that `y` is a consistent length.
+
+# nestedcv 0.6.3
+###### 17/05/2023
+* Improve `plot_var_stability()` to be more user friendly
+* Add `top` argument to shap plots
+
 # nestedcv 0.6.2
 ###### 15/05/2023
 * Modified examples and vignette in anticipation of new version of fastshap 0.1.0
