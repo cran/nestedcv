@@ -169,7 +169,7 @@ nestcv.glmnet <- function(y, x,
                           n_inner_folds = 10,
                           outer_folds = NULL,
                           pass_outer_folds = FALSE,
-                          alphaSet = seq(0, 1, 0.1),
+                          alphaSet = seq(0.1, 1, 0.1),
                           min_1se = 0,
                           keep = TRUE,
                           outer_train_predict = FALSE,
@@ -198,6 +198,11 @@ nestcv.glmnet <- function(y, x,
     outer_folds <- switch(outer_method,
                           cv = createFolds(y, k = n_outer_folds),
                           LOOCV = 1:length(y))
+  } else {
+    if ("n_outer_folds" %in% names(nestcv.call)) {
+      if (n_outer_folds != length(outer_folds)) stop("Mismatch between n_outer_folds and length(outer_folds)")
+    }
+    n_outer_folds <- length(outer_folds)
   }
   
   if (Sys.info()["sysname"] == "Windows" & cv.cores >= 2) {
