@@ -1,6 +1,6 @@
 Package: nestedcv
 Title: Nested Cross-Validation with 'glmnet' and 'caret'
-Version: 0.6.6
+Version: 0.6.7
 Authors@R: 
     c(person(given = "Myles",family = "Lewis",
     role = c("aut", "cre"),
@@ -21,15 +21,15 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Imports: caret, data.table, doParallel, foreach, ggplot2, glmnet,
         matrixStats, matrixTests, methods, parallel, pROC, Rfast, rlang
-RoxygenNote: 7.2.1
+RoxygenNote: 7.2.3
 Suggests: Boruta, CORElearn, fastshap, gbm, ggbeeswarm, ggpubr, hsstan,
         mda, mlbench, randomForest, ranger, RcppEigen, rmarkdown,
         knitr, SuperLearner
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2023-06-07 20:17:05 UTC; myles
+Packaged: 2023-07-02 15:50:50 UTC; myles
 Author: Myles Lewis [aut, cre] (<https://orcid.org/0000-0001-9365-5345>),
   Athina Spiliopoulou [aut] (<https://orcid.org/0000-0002-5929-6585>),
   Katriona Goldmann [aut] (<https://orcid.org/0000-0002-9073-6323>)
 Repository: CRAN
-Date/Publication: 2023-06-07 23:10:02 UTC
+Date/Publication: 2023-07-02 16:10:02 UTC

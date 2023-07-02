@@ -158,6 +158,15 @@ knitr::include_graphics("boxplot.png")
 #                           alphaSet = seq(0.7, 1, 0.05))
 #  summary(res.rtx)
 
+## -----------------------------------------------------------------------------
+library(mlbench)
+data(BostonHousing2)
+dat <- BostonHousing2
+y <- dat$cmedv  ## continuous outcome
+x <- subset(dat, select = -c(cmedv, medv, town))
+
+stat_filter(y, x, type = "full")
+
 ## ----eval = FALSE-------------------------------------------------------------
 #  filter <- function(y, x, ...) {}
 
@@ -281,6 +290,24 @@ legend('bottomright', legend = c("Unnested random oversampling",
 #  # ggplot2 version
 #  ggplot(ncv$outer_result[[1]]$fit) +
 #    scale_x_log10()
+
+## ----eval = FALSE-------------------------------------------------------------
+#  data(iris)
+#  y <- iris$Species
+#  x <- iris[, -5]
+#  
+#  out_folds <- caret::createFolds(y, k = 8)
+#  in_folds <- lapply(out_folds, function(i) {
+#    train_y <- y[-i]
+#    caret::createFolds(train_y, k = 8)
+#  })
+#  
+#  res <- nestcv.train(y, x, method = "rf",
+#                      cv.cores = 8,
+#                      inner_folds = in_folds,
+#                      outer_folds = out_folds)
+#  summary(res)
+#  res$outer_folds  # show which outer fold indices were used
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  # for nestcv.glmnet object

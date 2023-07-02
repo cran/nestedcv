@@ -12,13 +12,14 @@ anova_filter(
   p_cutoff = 0.05,
   rsq_cutoff = NULL,
   type = c("index", "names", "full"),
+  keep_factors = TRUE,
   ...
 )
 }
 \arguments{
 \item{y}{Response vector}
 
-\item{x}{Matrix of predictors}
+\item{x}{Matrix or dataframe of predictors}
 
 \item{force_vars}{Vector of column names within \code{x} which are always retained
 in the model (i.e. not filtered). Default \code{NULL} means all predictors will
@@ -38,16 +39,24 @@ removed. See \code{\link[=collinear]{collinear()}}.}
 \item{type}{Type of vector returned. Default "index" returns indices,
 "names" returns predictor names, "full" returns a matrix of p values.}
 
+\item{keep_factors}{Logical affecting factors with 3 or more levels.
+Dataframes are coerced to a matrix using \link{data.matrix}. Binary
+factors are converted to numeric values 0/1 and analysed as such. If
+\code{keep_factors} is \code{TRUE} (the default), factors with 3 or more levels are
+not filtered and are retained. If \code{keep_factors} is \code{FALSE}, they are
+removed.}
+
 \item{...}{optional arguments, e.g. \code{rsq_method}: see \code{\link[=collinear]{collinear()}}.}
 }
 \value{
 Integer vector of indices of filtered parameters (type = "index") or
 character vector of names (type = "names") of filtered parameters. If
-\code{type} is \code{"full"} full output from \link[Rfast:ftests]{Rfast::ftests} is returned.
+\code{type} is \code{"full"} full output from \code{\link[matrixTests:oneway]{matrixTests::col_oneway_welch()}} is
+returned.
 }
 \description{
-Simple univariate filter using anova (Welch's F-test) using the
-Rfast package for speed.
+Simple univariate filter using anova (Welch's F-test) using the \code{matrixTests}
+package for speed.
 }
 \examples{
 data(iris)

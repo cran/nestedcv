@@ -54,7 +54,7 @@ machine learning models. In addition, `nestedcv` adds functionality to enable
 cross-validation of the elastic net alpha parameter when fitting `glmnet`
 models.
 
-`nestedcv` partitions the dataset into outer and inner folds (default 10x10
+`nestedcv` partitions the dataset into outer and inner folds (default 10 x 10
 folds). The inner fold CV, (default is 10-fold), is used to tune optimal
 hyperparameters for models. Then the model is fitted on the whole inner fold and
 tested on the left-out data from the outer fold. This is repeated across all
@@ -335,6 +335,14 @@ res.rtx <- nestcv.glmnet(y = yrtx, x = data.rtx, min_1se = 0, filterFUN = ttest_
 summary(res.rtx)
 ```
 
+### One-hot encoding (dummy variables)
+
+`glmnet` can only accept a numeric matrix of predictors. Dataframes of
+predictors with factors or character variables can be converted to a matrix
+using one-hot encoding to create dummy variables using the function `one_hot()`.
+For `nestcv.glmnet` models, `one_hot()` should be used with the argument
+`all_levels = FALSE` to avoid the predictor matrix not being full rank.
+
 ### Filters
 
 Multiple filters for variable reduction are available including:
@@ -350,11 +358,19 @@ Multiple filters for variable reduction are available including:
 
 `lm_filter`       linear model with covariates
 
-`rf_filter`       random forest variable importance
+`rf_filter`       random forest variable importance using randomForest package
+
+`ranger_filter`   random forest variable importance using ranger package
 
 `relieff_filter`  ReliefF and other methods available via CORElearn
 
+`glmnet_filter`   uses sparsity of elastic net regression using glmnet to
+                  restrict variables
+
 `boruta_filter`   Boruta
+
+`stat_filter`     A swiss army knife univariate statistical filter for mixed 
+                  data with combined continuous & categorical data 
 ----------------- ---------------------------------------------------------
 
 ```{r eval = FALSE}
@@ -376,6 +392,24 @@ summary(res.rtx)
 Bootstrapped versions of the univariate filters are available [see
 `boot_ttest()`]. These use repeated random sampling to try to improve stability
 of ranking of predictors based on univariate statistics.
+
+`stat_filter()` is a swiss army knife filter which can handle dataframes with
+mixed data with combined continuous & categorical predictors. It uses different
+univariate statistics dependent on data type. For example, t-test is used for
+binary outcome with continuous predictors; correlation or linear regression for
+continuous outcome with continuous predictors etc. It can also be used to
+quickly generate summary statistics relating predictors to the response
+variable.
+
+```{r}
+library(mlbench)
+data(BostonHousing2)
+dat <- BostonHousing2
+y <- dat$cmedv  ## continuous outcome
+x <- subset(dat, select = -c(cmedv, medv, town))
+
+stat_filter(y, x, type = "full")
+```
 
 ### Custom filter
 
@@ -638,6 +672,47 @@ plot(ncv$outer_result[[1]]$fit, xTrans = log)
 ggplot(ncv$outer_result[[1]]$fit) +
   scale_x_log10() 
 ```
+
+### Stratifying CV folds
+
+By default `nestedcv` stratifies outer & inner CV folds based on the outcome
+variable using caret's `createFolds()` function. Users can control CV folds
+directly by providing their own lists of fold indices. Outer CV fold indices can
+simply be provided via the argument `outer_folds` to `nestcv.glmnet()` or
+`nestcv.train()`. This is a list of vectors with one vector of indices used for
+each test CV fold.
+
+The inner CV fold indices can also be controlled via the `inner_folds` argument.
+This is a list of a list of vectors. This can be useful if control of
+stratification is desired. The toy example below demonstrates how the
+`outer_folds` and `inner_folds` objects have to be structured.
+
+```{r eval = FALSE}
+data(iris)
+y <- iris$Species
+x <- iris[, -5]
+
+out_folds <- caret::createFolds(y, k = 8)
+in_folds <- lapply(out_folds, function(i) {
+  train_y <- y[-i]
+  caret::createFolds(train_y, k = 8)
+})
+
+res <- nestcv.train(y, x, method = "rf",
+                    cv.cores = 8,
+                    inner_folds = in_folds,
+                    outer_folds = out_folds)
+summary(res)
+res$outer_folds  # show which outer fold indices were used
+```
+
+In this example the outcome variable `y` has been used to stratify the folds for
+both outer and inner CV for 8 x 8 nested CV. But it could easily be replaced
+with a variable from the predictor dataframe if stratification by an imbalanced
+group is desired. For grouped data where members of a group must be kept
+together try using caret's `groupKFold()` function. For stratification with
+multiple columns (e.g. response + one or more grouping variables), try
+`multi_strata()` from the `splitTools` package.
 
 ### Making predictions
 

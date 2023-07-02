@@ -371,10 +371,10 @@ nestcv.train <- function(y, x,
   
   if (!is.na(finalCV)) {
     all_vars <- unlist(lapply(outer_res, function(i) {
-      vars <- colnames(i$fit$trainingData)
-      vars[vars != ".outcome"]
+      colnames(i$fit$trainingData)
     }))
     all_vars <- unique(c(all_vars, colnames(filtx)))
+    all_vars <- all_vars[all_vars %in% colnames(x)]
     xsub <- x[, all_vars]
   }
   
@@ -517,7 +517,6 @@ predict.nestcv.train <- function(object, newdata, ...) {
 #'   variable or number of levels if the variable is a factor. If `NA` are
 #'   detected, an extra column `n.NA` is added with the numbers of `NA` for each
 #'   variable.
-#' @importFrom Rfast colMedians colVars
 #' @export
 #' 
 summary_vars <- function(x) {
@@ -529,8 +528,9 @@ summary_vars <- function(x) {
     selCols <- unlist(lapply(x, is.numeric))
     mat <- as.matrix(x[, selCols])
   }
-  summary_mat <- cbind(colMeans(mat, na.rm = TRUE), colMedians(mat, na.rm = TRUE),
-                       colVars(mat, std = TRUE, na.rm = TRUE))
+  summary_mat <- cbind(colMeans(mat, na.rm = TRUE),
+                       matrixStats::colMedians(mat, na.rm = TRUE),
+                       matrixStats::colSds(mat, na.rm = TRUE))
   colnames(summary_mat) <- c("mean", "median", "sd")
   if (any(!selCols)) {
     nlevels_mat <- unlist(lapply(x[, !selCols], function(i) nlevels(as.factor(i))))
