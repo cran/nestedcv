@@ -1,6 +1,31 @@
 News
 =====
 
+# nestedcv 0.6.9
+###### 15/08/2023
+
+## New features
+
+* Added argument `verbose` in `nestcv.train()`, `nestcv.glmnet()` and 
+`outercv()`to show progress.
+* Added argument `multicore_fork` in `nestcv.train()` and `outercv()` to allow 
+choice of parallelisation between forked multicore processing using `mclapply` 
+or non-forked using `parLapply`. This can help prevent errors with certain
+multithreaded caret models e.g. `model = "xgbTree"`.
+* In `one_hot()` changed `all_levels` argument default to `FALSE` to be 
+compatible with regression models by default.
+* Add coefficient column to `lm_filter()` full results table
+
+## Bug fixes
+
+* Fixed significant bug in `lm_filter()` where variables with zero variance were
+incorrectly reporting very low p-values in linear models instead of returning
+`NA`. This is due to how rank deficient models are handled by
+`RcppEigen::fastLmPure`. Default method for `fastLmPure` has been changed to `0`
+to allow detection of rank deficient models.
+* Fixed bug in `weight()` caused by `NA`. Allow `weight()` to tolerate character 
+vectors.
+
 # nestedcv 0.6.7
 ###### 01/07/2023
 

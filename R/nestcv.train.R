@@ -58,8 +58,12 @@
 #' @param outer_train_predict Logical whether to save predictions on outer
 #'   training folds to calculate performance on outer training folds.
 #' @param cv.cores Number of cores for parallel processing of the outer loops.
-#'   NOTE: this uses `parallel::mclapply` on unix/mac and `parallel::parLapply`
-#'   on windows.
+#' @param multicore_fork Logical whether to use forked multicore parallel
+#'   processing. Forked multicore processing uses `parallel::mclapply`. It is
+#'   only available on unix/mac as windows does not allow forking. It is set to
+#'   `FALSE` by default in windows and `TRUE` in unix/mac. Non-forked parallel
+#'   processing is executed using `parallel::parLapply` or `pbapply::pblapply`
+#'   if `verbose` is `TRUE`.
 #' @param finalCV Logical whether to perform one last round of CV on the whole
 #'   dataset to determine the final model parameters. If set to `FALSE`, the
 #'   median of the best hyperparameters from outer CV folds for continuous/
@@ -73,6 +77,7 @@
 #'   if there are `NA` in 'y', but columns (predictors) containing `NA` are
 #'   removed from 'x' to preserve cases. Any other value means that `NA` are
 #'   ignored (a message is given).
+#' @param verbose Logical whether to print messages and show progress
 #' @param ... Arguments passed to [caret::train()]
 #' @return An object with S3 class "nestcv.train"
 #'   \item{call}{the matched call}
@@ -103,7 +108,11 @@
 #' `caret` using `registerDoParallel`. `caret` itself uses `foreach`.
 #' 
 #' Parallelisation is performed on the outer CV folds using `parallel::mclapply`
-#' on unix/mac and `parallel::parLapply` on windows.
+#' by default on unix/mac and `parallel::parLapply` on windows. `mclapply` uses
+#' forking which is faster. But some models (eg. xgbTree) use multi-threading
+#' which may cause issues in some circumstances with forked multicore
+#' processing. Setting `multicore_fork` to `FALSE` is slower but can alleviate
+#' some caret errors.
 #'   
 #' If the outer folds are run using parallelisation, then parallelisation in
 #' caret must be off, otherwise an error will be generated. Alternatively if you
@@ -206,6 +215,7 @@ nestcv.train <- function(y, x,
                          inner_folds = NULL,
                          pass_outer_folds = FALSE,
                          cv.cores = 1,
+                         multicore_fork = (Sys.info()["sysname"] != "Windows"),
                          metric = ifelse(is.factor(y), "logLoss", "RMSE"),
                          trControl = NULL,
                          tuneGrid = NULL,
@@ -213,7 +223,9 @@ nestcv.train <- function(y, x,
                          outer_train_predict = FALSE,
                          finalCV = TRUE,
                          na.option = "pass",
+                         verbose = TRUE,
                          ...) {
+  start <- Sys.time()
   nestcv.call <- match.call(expand.dots = TRUE)
   outer_method <- match.arg(outer_method)
   if (is.character(y)) y <- factor(y)
@@ -275,6 +287,7 @@ nestcv.train <- function(y, x,
     final_fit <- finalTune <- filtx <- yfinal <- xsub <- NA
   } else {
     # fit final model with CV on whole dataset first
+    if (verbose) message("Fitting final model using CV on whole data")
     dat <- nest_filt_bal(NULL, y, x, filterFUN, filter_options,
                          balance, balance_options)
     yfinal <- dat$ytrain
@@ -316,7 +329,10 @@ nestcv.train <- function(y, x,
     }
   }
   
-  if (Sys.info()["sysname"] == "Windows" & cv.cores >= 2) {
+  if (verbose && (!multicore_fork || Sys.getenv("RSTUDIO") == "1")) {
+    message("Performing ", n_outer_folds, "-fold outer CV, using ",
+            plural(cv.cores, "core(s)"))}
+  if (!multicore_fork && cv.cores >= 2) {
     cl <- makeCluster(cv.cores)
     dots <- list(...)
     varlist <- c("outer_folds", "inner_train_folds", "y", "x", "method", "filterFUN",
@@ -324,24 +340,41 @@ nestcv.train <- function(y, x,
                  "metric", "trControl", "tuneGrid", "outer_train_predict",
                  "nestcv.trainCore", "dots")
     clusterExport(cl, varlist = varlist, envir = environment())
-    outer_res <- parLapply(cl = cl, seq_along(outer_folds), function(i) {
-      args <- c(list(i=i, y=y, x=x, outer_folds = outer_folds,
-                     inner_train_folds = inner_train_folds, method=method,
-                     filterFUN=filterFUN, filter_options=filter_options,
-                     weights=weights, balance=balance,
-                     balance_options=balance_options, metric=metric,
-                     trControl=trControl, tuneGrid=tuneGrid,
-                     outer_train_predict=outer_train_predict), dots)
-      do.call(nestcv.trainCore, args)
-    })
+    if (verbose) {
+      if (!requireNamespace("pbapply", quietly = TRUE)) {
+        stop("Package 'pbapply' must be installed", call. = FALSE)}
+      outer_res <- pbapply::pblapply(seq_along(outer_folds), function(i) {
+        args <- c(list(i=i, y=y, x=x, outer_folds = outer_folds,
+                       inner_train_folds = inner_train_folds, method=method,
+                       filterFUN=filterFUN, filter_options=filter_options,
+                       weights=weights, balance=balance,
+                       balance_options=balance_options, metric=metric,
+                       trControl=trControl, tuneGrid=tuneGrid,
+                       outer_train_predict=outer_train_predict), dots)
+        do.call(nestcv.trainCore, args)
+      }, cl = cl)
+    } else {
+      outer_res <- parLapply(cl = cl, seq_along(outer_folds), function(i) {
+        args <- c(list(i=i, y=y, x=x, outer_folds = outer_folds,
+                       inner_train_folds = inner_train_folds, method=method,
+                       filterFUN=filterFUN, filter_options=filter_options,
+                       weights=weights, balance=balance,
+                       balance_options=balance_options, metric=metric,
+                       trControl=trControl, tuneGrid=tuneGrid,
+                       outer_train_predict=outer_train_predict), dots)
+        do.call(nestcv.trainCore, args)
+      })
+    }
     stopCluster(cl)
   } else {
+    # linux/mac, using forked parallel processing
     outer_res <- mclapply(seq_along(outer_folds), function(i) {
       nestcv.trainCore(i, y, x, outer_folds, inner_train_folds,
                        method, filterFUN, filter_options,
                        weights, balance, balance_options,
-                       metric, trControl, tuneGrid, outer_train_predict, ...)
-    }, mc.cores = cv.cores, mc.silent = TRUE, mc.allow.recursive = FALSE)
+                       metric, trControl, tuneGrid, outer_train_predict,
+                       verbose, ...)
+    }, mc.cores = cv.cores, mc.allow.recursive = FALSE)
   }
   
   predslist <- lapply(outer_res, '[[', 'preds')
@@ -361,6 +394,7 @@ nestcv.train <- function(y, x,
   
   if (!is.na(finalCV) && !finalCV) {
     # use outer folds for final parameters, fit single final model
+    if (verbose) message("Fitting single final model")
     finalTune <- finaliseTune(bestTunes)
     fitControl <- trainControl(method = "none", classProbs = is.factor(y))
     final_fit <- caret::train(x = filtx, y = yfinal, method = method,
@@ -378,6 +412,8 @@ nestcv.train <- function(y, x,
     xsub <- x[, all_vars]
   }
   
+  end <- Sys.time()
+  if (verbose) message("Duration: ", format(end - start))
   out <- list(call = nestcv.call,
               output = output,
               outer_result = outer_res,
@@ -403,7 +439,9 @@ nestcv.trainCore <- function(i, y, x, outer_folds, inner_train_folds,
                              method, filterFUN, filter_options,
                              weights, balance, balance_options,
                              metric, trControl, tuneGrid,
-                             outer_train_predict, ...) {
+                             outer_train_predict, verbose = FALSE, ...) {
+  start <- Sys.time()
+  if (verbose) message_parallel("Starting Fold ", i, " ...")
   test <- outer_folds[[i]]
   dat <- nest_filt_bal(test, y, x, filterFUN, filter_options,
                        balance, balance_options)
@@ -439,6 +477,11 @@ nestcv.trainCore <- function(i, y, x, outer_folds, inner_train_folds,
       train_preds <- cbind(train_preds, predyp)
     }
   } else train_preds <- NULL
+  if (verbose) {
+    end <- Sys.time()
+    message_parallel("                     Fold ", i, " done (",
+                     format(end - start, digits = 3), ")")
+  }
   ret <- list(preds = preds,
               train_preds = train_preds,
               fit = fit,
@@ -548,3 +591,18 @@ summary_vars <- function(x) {
 swapFoldIndex <- function(folds, len = max(unlist(folds))) {
   lapply(folds, function(i) setdiff(seq_len(len), i))
 }
+
+
+# Function which prints a message using shell echo; useful for printing 
+# messages from inside mclapply when running in Rstudio
+message_parallel <- function(...) {
+  if (Sys.getenv("RSTUDIO") != "1") return()
+  system(sprintf('echo "%s"', paste0(..., collapse = "")))
+}
+
+
+plural <- function(n, text) {
+  text <- if (n == 1) gsub("\\(s\\)", "", text) else gsub("\\(|\\)", "", text)
+  paste(n, text)
+}
+

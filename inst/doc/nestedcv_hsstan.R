@@ -9,16 +9,9 @@ library(pROC)
 ## ----eval = FALSE-------------------------------------------------------------
 #  library(hsstan)
 #  
-#  # specify options for running the code
-#  nfolds <- 3
-#  
-#  # specify number of cores for parallelising computation
-#  # the product of cv.cores and mc.cores will be used in total
-#  # number of cores for parallelising over CV folds
-#  cv.cores <- 1
 #  # number of cores for parallelising hsstan sampling
-#  # to pass CRAN package checks we need to create object oldopt
-#  # in the end we reset options to the old configuration
+#  # store original options in oldopt
+#  # at the end reset options to old configuration
 #  oldopt <- options(mc.cores = 2)
 #  
 #  # load iris dataset and simulate a continuous outcome
@@ -40,8 +33,8 @@ library(pROC)
 #                                                 nfilter = 2,
 #                                                 p_cutoff = NULL,
 #                                                 rsq_cutoff = 0.9),
-#                           n_outer_folds = nfolds, chains = 2,
-#                           cv.cores = cv.cores,
+#                           chains = 2,  # chains parallelised via options(mc.cores)
+#                           n_outer_folds = 3, cv.cores = 1,  # CV folds not parallelised
 #                           unpenalized = uvars, warmup = 100, iter = 200)
 
 ## ----eval = FALSE-------------------------------------------------------------
@@ -84,16 +77,10 @@ library(pROC)
 #  #> 2 Initial submodel 0.320306     0.01468 0.0000 -374.7  -48.83591
 #  #> 3          marker2 0.001506     0.99537 0.9953 -325.8    0.06535
 #  #> 4          marker3 0.000000     1.00000 1.0000 -325.9    0.00000
-#  options(oldopt)  # reset options
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  # sigmoid function
 #  sigmoid <- function(x) {1 / (1 + exp(-x))}
-#  
-#  # specify options for running the code
-#  nfolds <- 3
-#  cv.cores <- 1
-#  oldopt <- options(mc.cores = 2)
 #  
 #  # load iris dataset and create a binary outcome
 #  set.seed(267)
@@ -118,8 +105,8 @@ library(pROC)
 #                                                 nfilter = 2,
 #                                                 p_cutoff = NULL,
 #                                                 rsq_cutoff = 0.9),
-#                           n_outer_folds = nfolds, chains = 2,
-#                           cv.cores = cv.cores,
+#                           chains = 2,  # parallelise over chains
+#                           n_outer_folds = 3, cv.cores = 1,
 #                           unpenalized = uvars, warmup = 100, iter = 200)
 
 ## ----eval = FALSE-------------------------------------------------------------

@@ -1510,16 +1510,27 @@ for pre-filtering and model fitting differ from the data points used to
 quantify model performance. The <code>outercv()</code> function is used
 to perform univariate pre-filtering and cross-validate model performance
 in this setting.</p>
+<div id="parallelisation" class="section level4">
+<h4>Parallelisation</h4>
 <p>CAUTION should be used when setting the number of cores available for
-parallelisation. The code will use the product of <code>cv.cores</code>
-and <code>mc.cores</code>. The former controls parallelisation over
-folds, while the latter controls parallelisation in the Bayesian
-inference procedure. The default setting for <code>hsstan</code> is to
-use 4 Markov chains for sampling. We recommend setting
-<code>options(mc.cores = 4)</code> which will parallelise computation
-over the chains. If we are also using a 10-fold cross-validation
-procedure, and set <code>cv.cores = 10</code> to parallelise computation
-over folds, then 40 cores will be used in total.</p>
+parallelisation. The default setting in <code>hsstan</code> is to use 4
+cores to parallelise Markov chains in the Bayesian inference procedure.
+This can be switched off either by setting
+<code>options(mc.cores = 1)</code>.</p>
+<p>Argument <code>cv.cores</code> in <code>outercv()</code> controls
+parallelisation over the outer CV folds. On unix/mac setting
+<code>cv.cores</code> to &gt;1 will induce nested parallelisation which
+will generate an error, unless parallelisation of the chains is disabled
+by setting <code>options(mc.cores = 1)</code>.</p>
+<p>Nested parallelisation is feasible if <code>cv.cores</code> is &gt;1
+and <code>multicore_fork = FALSE</code> is set as this uses cluster
+based parallelisation instead of <code>mclapply</code>. Beware that
+large numbers of processes may be spawned: the code will use the product
+of <code>cv.cores</code> and <code>mc.cores</code>. If we are performing
+10-fold cross-validation with 4 chains and set
+<code>cv.cores = 10</code> then 40 processes will be invoked
+simultaneously.</p>
+</div>
 <div id="linear-regression-with-a-bayesian-shrinkage-model-continuous-outcomes" class="section level4">
 <h4>Linear regression with a Bayesian shrinkage model (continuous
 outcomes)</h4>
@@ -1528,23 +1539,16 @@ and model fitting in one part of the data (training fold), followed by
 evaluation of model performance on the left-out data (testing fold),
 repeated in each fold.</p>
 <p>Only one cross-validation split is needed (function
-<code>outercv</code>) as the Bayesian model does not require
+<code>outercv()</code>) as the Bayesian model does not require
 cross-validation for meta-parameters.</p>
 <p>Note, in the examples below length of sampling and number of chains
 is curtailed for speed. We recommend 4 chains, <code>warmup</code> 1000
 and <code>iter</code> 2000 in practice.</p>
 <pre class="r"><code>library(hsstan)
 
-# specify options for running the code
-nfolds &lt;- 3
-
-# specify number of cores for parallelising computation
-# the product of cv.cores and mc.cores will be used in total
-# number of cores for parallelising over CV folds
-cv.cores &lt;- 1
 # number of cores for parallelising hsstan sampling
-# to pass CRAN package checks we need to create object oldopt
-# in the end we reset options to the old configuration
+# store original options in oldopt
+# at the end reset options to old configuration
 oldopt &lt;- options(mc.cores = 2)
 
 # load iris dataset and simulate a continuous outcome
@@ -1566,8 +1570,8 @@ res.cv.hsstan &lt;- outercv(y = dt$outcome.cont, x = dt[, c(uvars, pvars)],
                                                nfilter = 2,
                                                p_cutoff = NULL,
                                                rsq_cutoff = 0.9),
-                         n_outer_folds = nfolds, chains = 2,
-                         cv.cores = cv.cores,
+                         chains = 2,  # chains parallelised via options(mc.cores)
+                         n_outer_folds = 3, cv.cores = 1,  # CV folds not parallelised
                          unpenalized = uvars, warmup = 100, iter = 200)</code></pre>
 <p>We can then view prediction performance based on the testing folds
 and examine the Bayesian model using the <code>hsstan</code>
@@ -1610,8 +1614,7 @@ print(projsel(res.cv.hsstan$final_fit), digits = 4)  # adding marker2
 #&gt; 1   Intercept only 0.325077     0.00000     NA -375.0  -49.10230
 #&gt; 2 Initial submodel 0.320306     0.01468 0.0000 -374.7  -48.83591
 #&gt; 3          marker2 0.001506     0.99537 0.9953 -325.8    0.06535
-#&gt; 4          marker3 0.000000     1.00000 1.0000 -325.9    0.00000
-options(oldopt)  # reset options</code></pre>
+#&gt; 4          marker3 0.000000     1.00000 1.0000 -325.9    0.00000</code></pre>
 <p>Here adding <code>marker2</code> improves the model fit: substantial
 decrease of KL-divergence from the full model to the submodel. Adding
 <code>marker3</code> does not improve the model fit: no decrease of
@@ -1629,11 +1632,6 @@ repeated in each fold.</p>
 cross-validation for meta-parameters.</p>
 <pre class="r"><code># sigmoid function
 sigmoid &lt;- function(x) {1 / (1 + exp(-x))}
-
-# specify options for running the code
-nfolds &lt;- 3
-cv.cores &lt;- 1
-oldopt &lt;- options(mc.cores = 2)
 
 # load iris dataset and create a binary outcome
 set.seed(267)
@@ -1658,8 +1656,8 @@ res.cv.hsstan &lt;- outercv(y = dt$outcome.bin,
                                                nfilter = 2,
                                                p_cutoff = NULL,
                                                rsq_cutoff = 0.9),
-                         n_outer_folds = nfolds, chains = 2,
-                         cv.cores = cv.cores,
+                         chains = 2,  # parallelise over chains
+                         n_outer_folds = 3, cv.cores = 1,
                          unpenalized = uvars, warmup = 100, iter = 200)</code></pre>
 <p>We view prediction performance based on testing folds and examine the
 model.</p>
@@ -1716,12 +1714,12 @@ decrease of KL-divergence from the full model to the submodel. Adding
 <code>marker3</code> does not improve the model fit: no decrease of
 KL-divergence from the full model to the submodel.</p>
 </div>
-<div id="parallelisation" class="section level1">
-<h1>Parallelisation</h1>
-<p>Note at time of writing, there appears to be a bug in
-<code>rstan</code> (used by <code>hsstan</code>) leading to it ignoring
-the argument <code>cores</code> and instead spawning multiple processes
-as specified by the <code>chain</code> argument. This behaviour can be
+<div id="note" class="section level1">
+<h1>Note</h1>
+<p>At time of writing, there appears to be a bug in <code>rstan</code>
+(used by <code>hsstan</code>) leading to it ignoring the pass-thru
+argument <code>cores</code> and instead spawning multiple processes as
+specified by the <code>chain</code> argument. This behaviour can be
 limited by setting <code>options(mc.cores = ..)</code>.</p>
 </div>
 <div id="troubleshooting" class="section level1">
@@ -1729,7 +1727,7 @@ limited by setting <code>options(mc.cores = ..)</code>.</p>
 <p>A key problem with parallelisation in R is that errors, warnings and
 user input have to be suppressed during multicore processing. If a
 <code>nestedcv</code> call is not working, we recommend that you try it
-with <code>cv.cores=1</code> first to check it starts up without error
+with <code>cv.cores = 1</code> first to check it starts up without error
 messages.</p>
 </div>
 <div id="citation" class="section level1">

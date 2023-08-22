@@ -20,6 +20,7 @@ nestcv.train(
   inner_folds = NULL,
   pass_outer_folds = FALSE,
   cv.cores = 1,
+  multicore_fork = (Sys.info()["sysname"] != "Windows"),
   metric = ifelse(is.factor(y), "logLoss", "RMSE"),
   trControl = NULL,
   tuneGrid = NULL,
@@ -27,6 +28,7 @@ nestcv.train(
   outer_train_predict = FALSE,
   finalCV = TRUE,
   na.option = "pass",
+  verbose = TRUE,
   ...
 )
 }
@@ -78,9 +80,14 @@ only be applied when \code{n_outer_folds} and the number of inner CV folds
 specified in \code{n_inner_folds} or \code{trControl} are the same and that no
 balancing is applied.}
 
-\item{cv.cores}{Number of cores for parallel processing of the outer loops.
-NOTE: this uses \code{parallel::mclapply} on unix/mac and \code{parallel::parLapply}
-on windows.}
+\item{cv.cores}{Number of cores for parallel processing of the outer loops.}
+
+\item{multicore_fork}{Logical whether to use forked multicore parallel
+processing. Forked multicore processing uses \code{parallel::mclapply}. It is
+only available on unix/mac as windows does not allow forking. It is set to
+\code{FALSE} by default in windows and \code{TRUE} in unix/mac. Non-forked parallel
+processing is executed using \code{parallel::parLapply} or \code{pbapply::pblapply}
+if \code{verbose} is \code{TRUE}.}
 
 \item{metric}{A string that specifies what summary metric will be used to
 select the optimal model. By default, "logLoss" is used for classification
@@ -117,6 +124,8 @@ needed.}
 if there are \code{NA} in 'y', but columns (predictors) containing \code{NA} are
 removed from 'x' to preserve cases. Any other value means that \code{NA} are
 ignored (a message is given).}
+
+\item{verbose}{Logical whether to print messages and show progress}
 
 \item{...}{Arguments passed to \code{\link[caret:train]{caret::train()}}}
 }
@@ -158,7 +167,11 @@ Parallelisation of the final fit when \code{finalCV = TRUE} is performed in
 \code{caret} using \code{registerDoParallel}. \code{caret} itself uses \code{foreach}.
 
 Parallelisation is performed on the outer CV folds using \code{parallel::mclapply}
-on unix/mac and \code{parallel::parLapply} on windows.
+by default on unix/mac and \code{parallel::parLapply} on windows. \code{mclapply} uses
+forking which is faster. But some models (eg. xgbTree) use multi-threading
+which may cause issues in some circumstances with forked multicore
+processing. Setting \code{multicore_fork} to \code{FALSE} is slower but can alleviate
+some caret errors.
 
 If the outer folds are run using parallelisation, then parallelisation in
 caret must be off, otherwise an error will be generated. Alternatively if you

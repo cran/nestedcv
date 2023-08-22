@@ -450,7 +450,7 @@ p1 + scale_fill_manual(values=c(&quot;orange&quot;, &quot;green3&quot;))</code><
 </div>
 <div id="explainable-ai-with-shapley-values" class="section level3">
 <h3>Explainable AI with Shapley values</h3>
-<p>The original implementation of <a href="https://github.com/slundberg/shap">shap</a> by Scott Lundberg is a
+<p>The original implementation of <a href="https://github.com/shap/shap">shap</a> by Scott Lundberg is a
 python package. We suggest using the R package <a href="https://cran.r-project.org/package=fastshap">fastshap</a> for
 examining <code>nestedcv</code> models since it works with
 classification or regression as well as any model type (regression such
@@ -504,8 +504,11 @@ similar. Use the <code>pred_train</code> wrapper when calling
 fit &lt;- nestcv.train(y, x,
                     method = &quot;gbm&quot;,
                     n_outer_folds = 3, cv.cores = 2)
+## Fitting final model using CV on whole data
 ## Loading required package: ggplot2
 ## Loading required package: lattice
+## Performing 3-fold outer CV, using 2 cores
+## Duration: 2.642143 secs
 
 # Only using 5 repeats here for speed, but recommend higher values of nsim
 sh &lt;- explain(fit, X=x, pred_wrapper = pred_train, nsim = 5)
