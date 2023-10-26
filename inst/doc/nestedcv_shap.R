@@ -23,7 +23,7 @@ vs
 ## -----------------------------------------------------------------------------
 plot_var_stability(fit)
 
-## ---- fig.width = 9, fig.height = 5-------------------------------------------
+## ----fig.width = 9, fig.height = 5--------------------------------------------
 # overlay directionality using colour
 p1 <- plot_var_stability(fit, final = FALSE, direction = 1)
 
@@ -32,7 +32,7 @@ p2 <- plot_var_stability(fit, final = FALSE, percent = F)
 
 ggpubr::ggarrange(p1, p2, ncol=2)
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  # change bubble colour scheme
 #  p1 + scale_fill_manual(values=c("orange", "green3"))
 
@@ -60,7 +60,7 @@ fit <- nestcv.train(y, x,
 sh <- explain(fit, X=x, pred_wrapper = pred_train, nsim = 5)
 plot_shap_beeswarm(sh, x, size = 1)
 
-## ---- fig.width = 9, fig.height = 3.5-----------------------------------------
+## ----fig.width = 9, fig.height = 3.5------------------------------------------
 library(ggplot2)
 data("iris")
 dat <- iris
@@ -84,7 +84,7 @@ s3 <- plot_shap_bar(sh3, x, sort = FALSE) +
 
 ggpubr::ggarrange(s1, s2, s3, ncol=3, legend = "bottom", common.legend = TRUE)
 
-## ---- fig.width = 9.5, fig.height = 3.5---------------------------------------
+## ----fig.width = 9.5, fig.height = 3.5----------------------------------------
 s1 <- plot_shap_beeswarm(sh1, x, sort = FALSE, cex = 0.7) +
   ggtitle("Setosa")
 s2 <- plot_shap_beeswarm(sh2, x, sort = FALSE, cex = 0.7) +

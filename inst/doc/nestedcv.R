@@ -52,10 +52,10 @@ legend('bottomright', legend = c("Nested CV", "Left-out inner CV folds",
                                  "Test partition, non-nested filtering"), 
        col = c("black", "blue", "red"), lty = 1, lwd = 2, bty = "n")
 
-## ---- out.width='75%', fig.align="center", echo=FALSE-------------------------
+## ----out.width='75%', fig.align="center", echo=FALSE--------------------------
 knitr::include_graphics("fig1.svg")
 
-## ---- out.width='75%', fig.align="center", echo=FALSE-------------------------
+## ----out.width='75%', fig.align="center", echo=FALSE--------------------------
 knitr::include_graphics("fig2.svg")
 
 ## ----eval = FALSE-------------------------------------------------------------
@@ -99,7 +99,7 @@ knitr::include_graphics("fig2.svg")
 #  plot_alphas(res.rtx)
 #  plot_lambdas(res.rtx)
 
-## ---- out.width='100%', fig.align="center", echo=FALSE------------------------
+## ----out.width='100%', fig.align="center", echo=FALSE-------------------------
 knitr::include_graphics("plot_alpha_lam.png")
 
 ## ----eval = FALSE-------------------------------------------------------------
@@ -112,7 +112,7 @@ knitr::include_graphics("plot_alpha_lam.png")
 #  # Number of non-zero coefficients
 #  plot(res.rtx$outer_result[[1]]$cvafit, xaxis = 'nvar')
 
-## ---- out.width='100%', fig.align="center", echo=FALSE------------------------
+## ----out.width='100%', fig.align="center", echo=FALSE-------------------------
 knitr::include_graphics("plot_cva.png")
 
 ## ----eval = FALSE-------------------------------------------------------------
@@ -125,13 +125,13 @@ knitr::include_graphics("plot_cva.png")
 #  plot(rtx.inroc, main = "Inner fold ROC", font.main = 1, col = 'red')
 #  legend("bottomright", legend = paste0("AUC = ", signif(pROC::auc(rtx.inroc), 3)), bty = 'n')
 
-## ---- out.width='100%', fig.align="center", echo=FALSE------------------------
+## ----out.width='100%', fig.align="center", echo=FALSE-------------------------
 knitr::include_graphics("roc.png")
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  boxplot_model(res.rtx, ylab = "VST")
 
-## ---- out.width='70%', fig.align="center", echo=FALSE-------------------------
+## ----out.width='70%', fig.align="center", echo=FALSE--------------------------
 knitr::include_graphics("boxplot.png")
 
 ## ----eval = FALSE-------------------------------------------------------------
