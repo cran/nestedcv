@@ -129,7 +129,7 @@ knitr::include_graphics("plot_cva.png")
 knitr::include_graphics("roc.png")
 
 ## ----eval = FALSE-------------------------------------------------------------
-#  boxplot_model(res.rtx, ylab = "VST")
+#  boxplot_expression(res.rtx, ylab = "VST")
 
 ## ----out.width='70%', fig.align="center", echo=FALSE--------------------------
 knitr::include_graphics("boxplot.png")
@@ -169,6 +169,46 @@ stat_filter(y, x, type = "full")
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  filter <- function(y, x, ...) {}
+
+## ----eval=FALSE---------------------------------------------------------------
+#  # this example requires the missRanger package
+#  library(missRanger)
+#  
+#  x_na <- generateNA(x)  # insert NA into x
+#  x_na <- as.matrix(x_na)
+#  
+#  # missRanger requires a dataframe, whereas glmnet requires a matrix
+#  impute_x <- function(x, ...) {
+#    missRanger(as.data.frame(x), num.trees = 50, ...)
+#  }
+#  
+#  res <- nestcv.glmnet(y, x_na, family = "gaussian",
+#                       alphaSet = 1,
+#                       n_outer_folds = 3, cv.cores = 2,
+#                       modifyX = impute_x,
+#                       na.option = "pass")
+
+## ----eval=FALSE---------------------------------------------------------------
+#  # receives training data from `x` and `y` only
+#  # returns object with class 'modxy'
+#  modxy <- function(y, x) {
+#    sc <- scale(x)
+#    cen <- attr(sc, "scaled:center")
+#    sca <- attr(sc, "scaled:scale")
+#    out <- cbind(cen, sca)
+#    class(out) <- "modxy"
+#    out
+#  }
+#  
+#  # define predict function for class 'modxy'
+#  # applied independently to train and test folds of `x`
+#  predict.modxy <- function(object, newdata, ...) {
+#    scale(newdata, center = object[,1], scale = object[,2])
+#  }
+#  
+#  res <- nestcv.glmnet(y, x, family = "gaussian", alphaSet = 1,
+#                       n_outer_folds = 3, cv.cores = 3,
+#                       modifyX = modxy, modifyX_useY = TRUE)
 
 ## -----------------------------------------------------------------------------
 ## Imbalanced dataset
@@ -315,6 +355,40 @@ legend('bottomright', legend = c("Unnested random oversampling",
 #  
 #  # for nestcv.train object
 #  preds <- predict(ncv, newdata = data.rtx)
+
+## ----results='hide'-----------------------------------------------------------
+data("iris")
+dat <- iris
+y <- dat$Species
+x <- dat[, 1:4]
+
+# single fit
+fit <- nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1, cv.cores = 2)
+
+# repeated nested CV
+res <- repeatcv(n = 5, nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1,
+                                     n_outer_folds = 4, cv.cores = 2))
+
+## -----------------------------------------------------------------------------
+res
+summary(res)
+
+## ----eval=FALSE---------------------------------------------------------------
+#  # using nested pipe from magrittr
+#  `%|>%` <- magrittr::pipe_nested
+#  
+#  res <- nestcv.glmnet(y, x,
+#                       family = "multinomial", alphaSet = 1, cv.cores = 2) %|>%
+#         repeatcv(5)
+
+## ----eval=FALSE---------------------------------------------------------------
+#  set.seed(123, "L'Ecuyer-CMRG")
+#  folds <- repeatfolds(y, repeats = 3, n_outer_folds = 4)
+#  
+#  res <- nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1,
+#                       n_outer_folds = 4, cv.cores = 2) %|>%
+#         repeatcv(3, repeat_folds = folds)
+#  res
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  parallel::detectCores(logical = FALSE)

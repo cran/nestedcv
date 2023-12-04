@@ -177,7 +177,7 @@ performance compared to scheme C since the numbers for total testing are larger.
 knitr::include_graphics("fig2.svg")
 ```
 
-### Nested CV with glmnet
+# Nested CV with glmnet
 
 In the real life example below, RNA-Sequencing gene expression data from
 synovial biopsies from patients with rheumatoid arthritis in the R4RA randomised
@@ -316,7 +316,7 @@ The overall expression level of each gene selected in the final model can be
 compared with a boxplot.
 
 ```{r eval = FALSE}
-boxplot_model(res.rtx, ylab = "VST")
+boxplot_expression(res.rtx, ylab = "VST")
 ```
 
 ```{r, out.width='70%', fig.align="center", echo=FALSE}
@@ -343,7 +343,7 @@ using one-hot encoding to create dummy variables using the function `one_hot()`.
 For `nestcv.glmnet` models, `one_hot()` should be used with the argument
 `all_levels = FALSE` to avoid the predictor matrix not being full rank.
 
-### Filters
+# Filters
 
 Multiple filters for variable reduction are available including:
 
@@ -431,7 +431,79 @@ Finally once the model performance has been calculated by nested CV. The filter
 is applied to the whole dataset when refitting the final model to the full
 dataset.
 
-### Class imbalance
+### Missing data
+
+The argument `modifyX` can be used to pass a function for imputing missing
+values in the predictor variables in `x`. This can be done either with or
+without knowledge of the outcome variable `y` by setting argument 
+`modifyX_useY`. If `modifyX_useY = FALSE`, then the `x` modifying function must
+simply return an updated `x`. For example the `missRanger` package uses random
+forest to impute missing values. It does this without knowledge of `y`. Thus
+imputation of missing values is performed in train and test outer folds
+independently.
+
+```{r eval=FALSE}
+# this example requires the missRanger package
+library(missRanger)
+
+x_na <- generateNA(x)  # insert NA into x
+x_na <- as.matrix(x_na)
+
+# missRanger requires a dataframe, whereas glmnet requires a matrix
+impute_x <- function(x, ...) {
+  missRanger(as.data.frame(x), num.trees = 50, ...)
+}
+
+res <- nestcv.glmnet(y, x_na, family = "gaussian",
+                     alphaSet = 1, 
+                     n_outer_folds = 3, cv.cores = 2,
+                     modifyX = impute_x,
+                     na.option = "pass")
+```
+
+### Nested modification of predictors
+
+If `modifyX_useY = TRUE`, this allows the use of `predict()` which can enable
+attributes to be learned from the training part of `x` and then applied to the
+test data without prior knowledge of the test data. At the same time it is
+possible to pass the training part of the outcome variable `y` to the modifying
+function. The modifying function must return a model type object with a set
+class for which a `predict()` function of that class exists. Internally, the
+function specified by `modifyX` is called and passed the outer CV training parts
+of `y` and `x` ensuring that the test folds are hidden. In the toy example
+below, the training part of `y` is passed into the function, but is not used and
+all that is done is to scale the predictors based only on the training folds.
+
+```{r eval=FALSE}
+# receives training data from `x` and `y` only
+# returns object with class 'modxy'
+modxy <- function(y, x) {
+  sc <- scale(x)  
+  cen <- attr(sc, "scaled:center")
+  sca <- attr(sc, "scaled:scale")
+  out <- cbind(cen, sca)
+  class(out) <- "modxy"
+  out
+}
+
+# define predict function for class 'modxy'
+# applied independently to train and test folds of `x`
+predict.modxy <- function(object, newdata, ...) {
+  scale(newdata, center = object[,1], scale = object[,2])
+}
+
+res <- nestcv.glmnet(y, x, family = "gaussian", alphaSet = 1,
+                     n_outer_folds = 3, cv.cores = 3,
+                     modifyX = modxy, modifyX_useY = TRUE)
+```
+
+The `predict()` part of the `modifyX` function can completely alter `x`, for
+example adding additional columns with interactions or other manipulations, or
+removing unnecessary columns. `nestedcv` does check that the column names are
+identical in both train and test folds after this process. Throughout the
+process train and test outer CV folds are kept separate.
+
+# Class imbalance
 
 Class imbalance is known to impact on model fitting for certain model types,
 e.g. random forest, SVM. Models may tend to aim to predict the majority class
@@ -604,7 +676,7 @@ Other arguments can be passed in to the balance function as a named list via the
 expanded/altered response vector and `x` the matrix or dataframe of predictors
 with increased/decreased samples in rows and predictors in columns.
 
-### Nested CV with caret
+# Nested CV with caret
 
 Nested CV can also be performed using the `caret` package framework written by
 Max Kuhn (https://topepo.github.io/caret/index.html). This enables access to the
@@ -714,7 +786,11 @@ together try using caret's `groupKFold()` function. For stratification with
 multiple columns (e.g. response + one or more grouping variables), try
 `multi_strata()` from the `splitTools` package.
 
-### Making predictions
+# Bayesian shrinkage models
+
+See the accompanying vignette "Using *outercv* with Bayesian shrinkage models".
+
+# Making predictions
 
 For all of the `nestedcv` model training functions described above, predictions
 on new data can be made by referencing the final fitted object which is fitted
@@ -728,19 +804,73 @@ preds <- predict(res.rtx, newdata = data.rtx, type = 'response')
 preds <- predict(ncv, newdata = data.rtx)
 ```
 
-### Bayesian shrinkage models
+# Repeated nested CV
 
-See the accompanying vignette "Using *outercv* with Bayesian shrinkage models".
+The main commands `nestcv.glmnet()`, `nestcv.train()`, `nestcv.SuperLearner()`
+and `outercv()` perform nested CV once, giving an estimate of performance from
+the outer CV folds across the whole data. Repeating this process many
+times, which is called 'repeated nested CV', gives a more accurate overall
+estimate of performance. This can be performed by wrapping a call to one of the
+above `nestedcv` model functions in `repeatcv()`.
+
+```{r results='hide'}
+data("iris")
+dat <- iris
+y <- dat$Species
+x <- dat[, 1:4]
+
+# single fit
+fit <- nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1, cv.cores = 2)
+
+# repeated nested CV
+res <- repeatcv(n = 5, nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1,
+                                     n_outer_folds = 4, cv.cores = 2))
+```
+```{r}
+res
+summary(res)
+```
+
+Or for those that prefer using pipes to lay out code, the nested pipe from the
+`magrittr` package can be employed (the standard pipe `%>%` will _not_ work).
+
+```{r eval=FALSE}
+# using nested pipe from magrittr
+`%|>%` <- magrittr::pipe_nested
+
+res <- nestcv.glmnet(y, x,
+                     family = "multinomial", alphaSet = 1, cv.cores = 2) %|>%
+       repeatcv(5)
+```
+
+If you are using repeated nested CV to compare performance between models, it is
+recommended to fix the sets of outer CV folds used across each repeat. The
+function `repeatfolds()` can be used to create a fixed set of outer CV folds for
+each repeat.
+
+```{r eval=FALSE}
+set.seed(123, "L'Ecuyer-CMRG")
+folds <- repeatfolds(y, repeats = 3, n_outer_folds = 4)
+
+res <- nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1,
+                     n_outer_folds = 4, cv.cores = 2) %|>%
+       repeatcv(3, repeat_folds = folds)
+res
+```
+
+Repeated nested CV is computationally intensive and can be very time consuming.
+We strongly recommend that these calls fully exploit parallelisation as
+explained below.
 
 # Parallelisation
 
-Currently `nestcv.glmnet`, `nestcv.train` and `outercv` all allow
-parallelisation of the outer CV loop using `mclapply` from the `parallel`
-package on unix/mac and `parLapply` on windows. This is enabled by specifying
-the number of cores using the argument `cv.cores`. Since in some cases the
-filtering process can be time consuming (e.g. `rf_filter`, `relieff_filter`), we
-tend to recommend parallelisation of the outer CV loop over parallelisation of
-the inner CV loop.
+Currently `nestcv.glmnet`, `nestcv.train`, `nestcv.SuperLearner` and `outercv`
+all allow parallelisation of the outer CV loop using `mclapply` from the
+`parallel` package on unix/mac and `parLapply` on windows. This is enabled by
+specifying the number of cores using the argument `cv.cores`. Since in some
+cases the filtering process can be time consuming (e.g. `rf_filter`,
+`relieff_filter`), we tend to recommend parallelisation of the outer CV loop
+over parallelisation of the inner CV loop.
 
 To check the number of physical cores, use:
 
@@ -768,7 +898,8 @@ duplicating data and packages for each process.
 # Troubleshooting
 
 A key problem with parallelisation in R is that errors, warnings and user input
-have to be suppressed during multicore processing. If a `nestedcv` call is not
+have to be suppressed during multicore processing, except in Rstudio which
+allows some special printing to the console. If a `nestedcv` call is not
 working, we recommend that you try it with `cv.cores=1` first to check it starts
 up without error messages.
 
