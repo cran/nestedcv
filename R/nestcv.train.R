@@ -122,16 +122,21 @@
 #' 
 #' Parallelisation is performed on the outer CV folds using `parallel::mclapply`
 #' by default on unix/mac and `parallel::parLapply` on windows. `mclapply` uses
-#' forking which is faster. But some models (eg. xgbTree) use multi-threading
-#' which may cause issues in some circumstances with forked multicore
-#' processing. Setting `multicore_fork` to `FALSE` is slower but can alleviate
-#' some caret errors.
+#' forking which is faster. But some models use multi-threading which may cause
+#' issues in some circumstances with forked multicore processing. Setting
+#' `multicore_fork` to `FALSE` is slower but can alleviate some caret errors.
 #'   
 #' If the outer folds are run using parallelisation, then parallelisation in
 #' caret must be off, otherwise an error will be generated. Alternatively if you
 #' wish to use parallelisation in caret, then parallelisation in `nestcv.train`
 #' can be fully disabled by leaving `cv.cores = 1`.
-#'   
+#'
+#' xgboost models fitted via caret using `method = "xgbTree"` or `"xgbLinear"`
+#' invoke openMP multithreading on linux/windows by default which causes
+#' `nestcv.train` to fail when `cv.cores` >1 (nested parallelisation). Mac OS is
+#' unaffected. In order to prevent this, `nestcv.train()` sets openMP threads to
+#' 1 if `cv.cores` >1.
+#'
 #' For classification, `metric` defaults to using 'logLoss' with the `trControl`
 #' arguments `classProbs = TRUE, summaryFunction = mnLogLoss`, rather than
 #' 'Accuracy' which is the default classification metric in `caret`. See
@@ -296,6 +301,15 @@ nestcv.train <- function(y, x,
     if (nrow(tuneGrid) == 1) {
       trControl <- trainControl(method = "none", classProbs = TRUE)
       inner_train_folds <- NULL
+    }
+  }
+  
+  # disable openMP multithreading (fix for xgboost)
+  if (cv.cores >= 2) {
+    threads <- RhpcBLASctl::omp_get_max_threads()
+    if (!is.na(threads) && threads > 1) {
+      RhpcBLASctl::omp_set_num_threads(1L)
+      on.exit(RhpcBLASctl::omp_set_num_threads(threads))
     }
   }
   

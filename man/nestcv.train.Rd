@@ -187,15 +187,20 @@ Parallelisation of the final fit when \code{finalCV = TRUE} is performed in
 
 Parallelisation is performed on the outer CV folds using \code{parallel::mclapply}
 by default on unix/mac and \code{parallel::parLapply} on windows. \code{mclapply} uses
-forking which is faster. But some models (eg. xgbTree) use multi-threading
-which may cause issues in some circumstances with forked multicore
-processing. Setting \code{multicore_fork} to \code{FALSE} is slower but can alleviate
-some caret errors.
+forking which is faster. But some models use multi-threading which may cause
+issues in some circumstances with forked multicore processing. Setting
+\code{multicore_fork} to \code{FALSE} is slower but can alleviate some caret errors.
 
 If the outer folds are run using parallelisation, then parallelisation in
 caret must be off, otherwise an error will be generated. Alternatively if you
 wish to use parallelisation in caret, then parallelisation in \code{nestcv.train}
 can be fully disabled by leaving \code{cv.cores = 1}.
+
+xgboost models fitted via caret using \code{method = "xgbTree"} or \code{"xgbLinear"}
+invoke openMP multithreading on linux/windows by default which causes
+\code{nestcv.train} to fail when \code{cv.cores} >1 (nested parallelisation). Mac OS is
+unaffected. In order to prevent this, \code{nestcv.train()} sets openMP threads to
+1 if \code{cv.cores} >1.
 
 For classification, \code{metric} defaults to using 'logLoss' with the \code{trControl}
 arguments \verb{classProbs = TRUE, summaryFunction = mnLogLoss}, rather than
