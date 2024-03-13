@@ -1,6 +1,21 @@
 News
 =====
 
+# nestedcv 0.7.8
+###### 11/03/2024
+* Added `prc()` which enables easy building of precision-recall curves from
+'nestedcv' models and `repeatcv()` results.
+* Added `predict` method for `cva.glmnet`.
+* Removed magrittr as an imported package. The standard R pipe `|>` can be used 
+instead.
+* Added `metrics()` which gives additional performance metrics for binary 
+classification models such as F1 score, Matthew's correlation coefficient and 
+precision recall AUC.
+* Added `pls_filter()` which uses partial least squares regression to filter 
+features.
+* Enabled parallelisation over repeats in `repeatedcv()` leading to significant 
+improvement in speed.
+
 # nestedcv 0.7.4
 ###### 30/01/2024
 * Fixed issue with xgboost on linux/windows with parallel processing in 

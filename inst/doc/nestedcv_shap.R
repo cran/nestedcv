@@ -20,15 +20,14 @@ fit <- nestcv.glmnet(y, x, family = "gaussian",
 vs <- var_stability(fit)
 vs
 
-## -----------------------------------------------------------------------------
-plot_var_stability(fit)
+## ----fig.dim = c(10, 5)-------------------------------------------------------
+p1 <- plot_var_stability(fit)
 
-## ----fig.width = 9, fig.height = 5--------------------------------------------
 # overlay directionality using colour
-p1 <- plot_var_stability(fit, final = FALSE, direction = 1)
+p2 <- plot_var_stability(fit, final = FALSE, direction = 1)
 
-# show directionality with the sign of the variable importance
-p2 <- plot_var_stability(fit, final = FALSE, percent = F)
+# or show directionality with the sign of the variable importance
+# plot_var_stability(fit, final = FALSE, percent = F)
 
 ggpubr::ggarrange(p1, p2, ncol=2)
 
@@ -50,15 +49,15 @@ plot_shap_bar(sh, x)
 # Plot beeswarm plot
 plot_shap_beeswarm(sh, x, size = 1)
 
-## -----------------------------------------------------------------------------
-# Only 3 outer folds to speed up process
-fit <- nestcv.train(y, x,
-                    method = "gbm",
-                    n_outer_folds = 3, cv.cores = 2)
-
-# Only using 5 repeats here for speed, but recommend higher values of nsim
-sh <- explain(fit, X=x, pred_wrapper = pred_train, nsim = 5)
-plot_shap_beeswarm(sh, x, size = 1)
+## ----eval=FALSE---------------------------------------------------------------
+#  # Only 3 outer folds to speed up process
+#  fit <- nestcv.train(y, x,
+#                      method = "gbm",
+#                      n_outer_folds = 3, cv.cores = 2)
+#  
+#  # Only using 5 repeats here for speed, but recommend higher values of nsim
+#  sh <- explain(fit, X=x, pred_wrapper = pred_train, nsim = 5)
+#  plot_shap_beeswarm(sh, x, size = 1)
 
 ## ----fig.width = 9, fig.height = 3.5------------------------------------------
 library(ggplot2)
@@ -93,4 +92,11 @@ s3 <- plot_shap_beeswarm(sh3, x, sort = FALSE, cex = 0.7) +
   ggtitle("Virginica")
 
 ggpubr::ggarrange(s1, s2, s3, ncol=3, legend = "right", common.legend = TRUE)
+
+## ----eval=FALSE---------------------------------------------------------------
+#  sh <- explain(fit, X = fit$xsub, pred_wrapper = pred_nestcv_glmnet, nsim = 5)
+#  plot_shap_bar(sh, fit$xsub)
+#  
+#  sh <- explain(fit, X = x[, fit$final_vars], pred_wrapper = pred_nestcv_glmnet, nsim = 5)
+#  plot_shap_bar(sh, x[, fit$final_vars])
 

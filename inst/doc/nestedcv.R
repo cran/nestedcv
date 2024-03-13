@@ -129,12 +129,6 @@ knitr::include_graphics("plot_cva.png")
 knitr::include_graphics("roc.png")
 
 ## ----eval = FALSE-------------------------------------------------------------
-#  boxplot_expression(res.rtx, ylab = "VST")
-
-## ----out.width='70%', fig.align="center", echo=FALSE--------------------------
-knitr::include_graphics("boxplot.png")
-
-## ----eval = FALSE-------------------------------------------------------------
 #  # Outer LOOCV
 #  res.rtx <- nestcv.glmnet(y = yrtx, x = data.rtx, min_1se = 0, filterFUN = ttest_filter,
 #                           filter_options = list(nfilter = 300, p_cutoff = NULL),
@@ -282,7 +276,7 @@ fit4 <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
                       filterFUN = ttest_filter)
 fit4$summary
 
-## -----------------------------------------------------------------------------
+## ----fig.dim = c(5, 5)--------------------------------------------------------
 plot(fit1$roc, col='green')
 lines(fit1b$roc, col='red')
 lines(fit2$roc, col='blue')
@@ -349,6 +343,30 @@ legend('bottomright', legend = c("Unnested random oversampling",
 #  summary(res)
 #  res$outer_folds  # show which outer fold indices were used
 
+## -----------------------------------------------------------------------------
+library(mlbench)
+data(Sonar)
+y <- Sonar$Class
+x <- Sonar[, -61]
+
+fit1 <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
+                      n_outer_folds = 4, cv.cores = 2)
+
+metrics(fit1, extra = TRUE)
+
+## ----fig.dim = c(10, 5)-------------------------------------------------------
+fit1$prc <- prc(fit1)
+
+# precision-recall AUC values
+fit1$prc$auc
+
+# plot ROC and PR curves
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 2, 2) +.1)
+plot(fit1$roc, col = "red", main = "ROC", las = 1)
+
+plot(fit1$prc, col = "red", main = "Precision-recall")
+par(op)
+
 ## ----eval = FALSE-------------------------------------------------------------
 #  # for nestcv.glmnet object
 #  preds <- predict(res.rtx, newdata = data.rtx, type = 'response')
@@ -357,42 +375,48 @@ legend('bottomright', legend = c("Unnested random oversampling",
 #  preds <- predict(ncv, newdata = data.rtx)
 
 ## ----results='hide'-----------------------------------------------------------
-data("iris")
-dat <- iris
-y <- dat$Species
-x <- dat[, 1:4]
+data(Sonar)
+y <- Sonar$Class
+x <- Sonar[, -61]
 
 # single fit
-fit <- nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1, cv.cores = 2)
+fit <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
+                     n_outer_folds = 4, cv.cores = 2)
 
 # repeated nested CV
-res <- repeatcv(n = 5, nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1,
-                                     n_outer_folds = 4, cv.cores = 2))
+set.seed(123, "L'Ecuyer-CMRG")
+repcv <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
+                       n_outer_folds = 4) |>
+         repeatcv(8, rep.cores = 2)
 
 ## -----------------------------------------------------------------------------
-res
-summary(res)
+repcv
+summary(repcv)
 
 ## ----eval=FALSE---------------------------------------------------------------
-#  # using nested pipe from magrittr
-#  `%|>%` <- magrittr::pipe_nested
-#  
-#  res <- nestcv.glmnet(y, x,
-#                       family = "multinomial", alphaSet = 1, cv.cores = 2) %|>%
-#         repeatcv(5)
-
-## ----eval=FALSE---------------------------------------------------------------
-#  set.seed(123, "L'Ecuyer-CMRG")
 #  folds <- repeatfolds(y, repeats = 3, n_outer_folds = 4)
 #  
-#  res <- nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1,
-#                       n_outer_folds = 4, cv.cores = 2) %|>%
-#         repeatcv(3, repeat_folds = folds)
-#  res
+#  repcv <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
+#                         n_outer_folds = 4) |>
+#           repeatcv(3, repeat_folds = folds, rep.cores = 2)
+#  repcv
+
+## ----fig.dim = c(10, 5)-------------------------------------------------------
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 2, 2) +.1)
+plot(fit1$roc, col = "red", las = 1, main = "ROC")  # single nested cv
+lines(repcv$roc)  # repeated nested cv
+
+repcv$prc <- prc(repcv)  # calculate precision-recall curve
+
+plot(fit1$prc, col = "red", main = "Precision-recall")  # single nested cv
+lines(repcv$prc)  # repeated nested cv
+legend("topright", legend = c("single nested cv", "repeat nested cv"),
+       col = c("red", "black"), lwd = 2, bty = "n")
+par(op)
+
+## ----eval = FALSE-------------------------------------------------------------
+#  set.seed(123, "L'Ecuyer-CMRG")
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  parallel::detectCores(logical = FALSE)
-
-## ----eval = FALSE-------------------------------------------------------------
-#  set.seed(123, "L'Ecuyer-CMRG")
 

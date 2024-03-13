@@ -141,11 +141,6 @@ library(pROC)
 #  #>            0.8284              0.7000              0.6993
 #  
 #  # examine the Bayesian model
-#  sampler.stats(res.cv.hsstan$final_fit)
-#  #>         accept.stat stepsize divergences treedepth gradients warmup sample
-#  #> chain:1      0.9826   0.0611           0         7      6792   0.08   0.07
-#  #> chain:2      0.9797   0.0651           0         7      5620   0.13   0.06
-#  #> all          0.9811   0.0631           0         7     12412   0.21   0.13
 #  print(projsel(res.cv.hsstan$final_fit), digits = 4)  # adding marker2
 #  #>                                                      Model        KL        ELPD
 #  #>                                             Intercept only   0.20643  -104.26957

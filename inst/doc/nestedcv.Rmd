@@ -312,17 +312,6 @@ legend("bottomright", legend = paste0("AUC = ", signif(pROC::auc(rtx.inroc), 3))
 knitr::include_graphics("roc.png")
 ```
 
-The overall expression level of each gene selected in the final model can be 
-compared with a boxplot.
-
-```{r eval = FALSE}
-boxplot_expression(res.rtx, ylab = "VST")
-```
-
-```{r, out.width='70%', fig.align="center", echo=FALSE}
-knitr::include_graphics("boxplot.png")
-```
-
 Leave-one-out cross-validation (LOOCV) can be performed on the outer folds.
 
 ```{r eval = FALSE}
@@ -337,11 +326,12 @@ summary(res.rtx)
 
 ### One-hot encoding (dummy variables)
 
-`glmnet` can only accept a numeric matrix of predictors. Dataframes of
-predictors with factors or character variables can be converted to a matrix
-using one-hot encoding to create dummy variables using the function `one_hot()`.
-For `nestcv.glmnet` models, `one_hot()` should be used with the argument
-`all_levels = FALSE` to avoid the predictor matrix not being full rank.
+`glmnet` and some caret models (e.g. SVM) can only accept a numeric matrix of
+predictors. Dataframes of predictors with factors or character variables can be
+converted to a matrix using one-hot encoding to create dummy variables using the
+function `one_hot()`. For `nestcv.glmnet` models, `one_hot()` should be used
+with the argument `all_levels = FALSE` to avoid the predictor matrix not being
+full rank.
 
 # Filters
 
@@ -366,6 +356,8 @@ Multiple filters for variable reduction are available including:
 
 `glmnet_filter`   uses sparsity of elastic net regression using glmnet to
                   restrict variables
+                  
+`pls_filter`      partial least squares regression filter using pls package
 
 `boruta_filter`   Boruta
 
@@ -639,7 +631,7 @@ fit4$summary
 Finally we plot ROC curves to illustrate the differences between these
 approaches.
 
-```{r}
+```{r, fig.dim = c(5, 5)}
 plot(fit1$roc, col='green')
 lines(fit1b$roc, col='red')
 lines(fit2$roc, col='blue')
@@ -790,6 +782,49 @@ multiple columns (e.g. response + one or more grouping variables), try
 
 See the accompanying vignette "Using *outercv* with Bayesian shrinkage models".
 
+# Extra performance metrics
+
+For binary classification models, the function `metrics()` can be used to obtain
+additional performance metrics including area under precision-recall curve,
+Cohen's kappa, F1 score and Matthews correlation coefficient. Some of these vary
+depending on which category is considered the positive or relevant class. The
+default setting is that factors are ordered as 'controls' then 'cases' (factor 
+level 1 then 2). Setting the argument `positive = 1` or to the character value
+of the positive factor level alters which factor level is considered positive or
+relevant.
+
+```{r}
+library(mlbench)
+data(Sonar)
+y <- Sonar$Class
+x <- Sonar[, -61]
+
+fit1 <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
+                      n_outer_folds = 4, cv.cores = 2)
+
+metrics(fit1, extra = TRUE)
+```
+
+## Precision-recall curves
+
+While ROC curve objects are generated automatically for binary models,
+precision-recall curves can be quickly generated for `nestedcv` models using the
+convenience function `prc()` which employs the package ROCR.
+
+```{r, fig.dim = c(10, 5)}
+fit1$prc <- prc(fit1)
+
+# precision-recall AUC values
+fit1$prc$auc
+
+# plot ROC and PR curves
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 2, 2) +.1)
+plot(fit1$roc, col = "red", main = "ROC", las = 1)
+
+plot(fit1$prc, col = "red", main = "Precision-recall")
+par(op)
+```
+
 # Making predictions
 
 For all of the `nestedcv` model training functions described above, predictions
@@ -810,37 +845,28 @@ The main commands `nestcv.glmnet()`, `nestcv.train()`, `nestcv.SuperLearner()`
 and `outercv()` perform nested CV once, giving an estimate of performance from
 the outer CV folds across the whole data. Repeating this process many
 times, which is called 'repeated nested CV', gives a more accurate overall
-estimate of performance. This can be performed by wrapping a call to one of the
-above `nestedcv` model functions in `repeatcv()`.
+estimate of performance. This can be performed by piping a call to one of the
+above `nestedcv` model functions to `repeatcv()` using the pipe `|>` (the
+standard magrittr pipe `%>%` will _not_ work).
 
 ```{r results='hide'}
-data("iris")
-dat <- iris
-y <- dat$Species
-x <- dat[, 1:4]
+data(Sonar)
+y <- Sonar$Class
+x <- Sonar[, -61]
 
 # single fit
-fit <- nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1, cv.cores = 2)
+fit <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
+                     n_outer_folds = 4, cv.cores = 2)
 
 # repeated nested CV
-res <- repeatcv(n = 5, nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1,
-                                     n_outer_folds = 4, cv.cores = 2))
+set.seed(123, "L'Ecuyer-CMRG")
+repcv <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
+                       n_outer_folds = 4) |>
+         repeatcv(8, rep.cores = 2)
 ```
 ```{r}
-res
-summary(res)
-```
-
-Or for those that prefer using pipes to lay out code, the nested pipe from the
-`magrittr` package can be employed (the standard pipe `%>%` will _not_ work).
-
-```{r eval=FALSE}
-# using nested pipe from magrittr
-`%|>%` <- magrittr::pipe_nested
-
-res <- nestcv.glmnet(y, x,
-                     family = "multinomial", alphaSet = 1, cv.cores = 2) %|>%
-       repeatcv(5)
+repcv
+summary(repcv)
 ```
 
 If you are using repeated nested CV to compare performance between models, it is
@@ -849,18 +875,39 @@ function `repeatfolds()` can be used to create a fixed set of outer CV folds for
 each repeat.
 
 ```{r eval=FALSE}
-set.seed(123, "L'Ecuyer-CMRG")
 folds <- repeatfolds(y, repeats = 3, n_outer_folds = 4)
 
-res <- nestcv.glmnet(y, x, family = "multinomial", alphaSet = 1,
-                     n_outer_folds = 4, cv.cores = 2) %|>%
-       repeatcv(3, repeat_folds = folds)
-res
+repcv <- nestcv.glmnet(y, x, family = "binomial", alphaSet = 1,
+                       n_outer_folds = 4) |>
+         repeatcv(3, repeat_folds = folds, rep.cores = 2)
+repcv
 ```
 
-Repeated nested CV is computationally intensive and can be very time consuming.
-We strongly recommend that these calls fully exploit parallelisation as
-explained below.
+`repeatcv()` applied to binary `nestedcv` models will store a `pROC` object
+which concatenates all of the test fold predictions across all repeats. This can
+be easily plotted and shows a smoother ROC curve compared to the ROC curve from
+a single model.
+
+Similarly, a more refined precision-recall curve can also be generated from the
+repeated nested CV predictions.
+
+```{r, fig.dim = c(10, 5)}
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 2, 2) +.1)
+plot(fit1$roc, col = "red", las = 1, main = "ROC")  # single nested cv
+lines(repcv$roc)  # repeated nested cv
+
+repcv$prc <- prc(repcv)  # calculate precision-recall curve
+
+plot(fit1$prc, col = "red", main = "Precision-recall")  # single nested cv
+lines(repcv$prc)  # repeated nested cv
+legend("topright", legend = c("single nested cv", "repeat nested cv"),
+       col = c("red", "black"), lwd = 2, bty = "n")
+par(op)
+```
+
+Repeated nested CV is computationally intensive and very time consuming. We
+strongly recommend that these calls fully exploit parallelisation as explained
+below.
 
 # Parallelisation
 
@@ -871,12 +918,6 @@ specifying the number of cores using the argument `cv.cores`. Since in some
 cases the filtering process can be time consuming (e.g. `rf_filter`,
 `relieff_filter`), we tend to recommend parallelisation of the outer CV loop
 over parallelisation of the inner CV loop.
-
-To check the number of physical cores, use:
-
-```{r eval = FALSE}
-parallel::detectCores(logical = FALSE)
-```
 
 To maintain consistency with random numbers during parallelisation set the
 random number seed in the following way:
@@ -894,6 +935,30 @@ processes being generated. We generally find this does not lead to much speed up
 once the number of processes reaches the number of physical cores, as all
 processors are saturated and there is both time and memory overheads for
 duplicating data and packages for each process.
+
+## How many cores?
+
+Repeated nested CV is usually best parallelised over the repeats by maxing out
+`rep.cores` first, since there is less overhead due to fewer processes being
+spawned. You can set `cv.cores` as well, but beware this can lead to a large
+number of threads (the product of `rep.cores` x `cv.cores`).
+
+`mclapply()` will not request more cores than the number of elements being
+parallelised. So if you set `n = 3` for 3 repeats, then there is no point
+setting `rep.cores` >= 4 as only 3 processes will be spawned across the repeats.
+Similarly if you do 10x10-fold nested CV, there is no point setting 
+`cv.cores` >= 11 as only 10 processes can be spawned across the outer CV folds.
+So if you are doing low numbers of repeats (e.g. 3-5), then it may be slightly
+faster to set `cv.cores` to its maximum instead.
+
+Parallelisation is generally fastest if the total number of cores requested is
+limited to the number of physical cores or just slightly above this, e.g.
+requesting a total of 8-10 cores on a CPU with 8 physical cores. To check the
+number of physical cores, use:
+
+```{r eval = FALSE}
+parallel::detectCores(logical = FALSE)
+```
 
 # Troubleshooting
 

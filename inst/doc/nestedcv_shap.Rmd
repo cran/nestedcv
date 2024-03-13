@@ -55,8 +55,16 @@ vs
 
 Variable stability can be plotted using `plot_var_stability()`.
 
-```{r}
-plot_var_stability(fit)
+```{r, fig.dim = c(10, 5)}
+p1 <- plot_var_stability(fit)
+
+# overlay directionality using colour
+p2 <- plot_var_stability(fit, final = FALSE, direction = 1)
+
+# or show directionality with the sign of the variable importance
+# plot_var_stability(fit, final = FALSE, percent = F)
+
+ggpubr::ggarrange(p1, p2, ncol=2)
 ```
 
 By default only the predictors chosen in the final model are shown. If the
@@ -80,16 +88,6 @@ classification or the sign of regression coefficient for continuous outcomes
 (not available for multiclass caret models). To better understand relationship
 and direction of effect of each predictor within the final model, we recommend
 using SHAP values.
-
-```{r, fig.width = 9, fig.height = 5}
-# overlay directionality using colour
-p1 <- plot_var_stability(fit, final = FALSE, direction = 1)
-
-# show directionality with the sign of the variable importance
-p2 <- plot_var_stability(fit, final = FALSE, percent = F)
-
-ggpubr::ggarrange(p1, p2, ncol=2)
-```
 
 Alternatively a barplot is available using `barplot_var_stability()`.
 
@@ -146,6 +144,9 @@ Note that these SHAP plots only show the final fitted model (on the whole data),
 whereas the variable stability plots examine models across the outer CV folds as
 well as the final model.
 
+Be careful if you have massive numbers of predictors in `x` (see
+[Troubleshooting](#troubleshooting)).
+
 `nestedcv` also provides a quick plotting function `plot_shap_beeswarm` for
 generating ggplot2 beeswarm plots similar to those made by the original python
 `shap` package.
@@ -163,7 +164,7 @@ package.
 The process for a caret model fitted using `nestedcv` is similar. Use the
 `pred_train` wrapper when calling `explain()`.
 
-```{r}
+```{r, eval=FALSE}
 # Only 3 outer folds to speed up process
 fit <- nestcv.train(y, x,
                     method = "gbm",
@@ -231,6 +232,22 @@ However, multi-level factors with 3 or more levels are not clearly interpretable
 with SHAP values. We recommend these are one-hot encoded with dummy variables
 using the function `one_hot()`. This function accepts dataframes and can encode
 multiple factors and character columns, producing a matrix as a result.
+
+### Troubleshooting
+
+`explain()` runs progressively slowly with larger numbers of input predictors.
+So if you have a very large number of predictors in `x` it is much better to
+pass only the subset of predictors in the final model. These are stored in
+fitted `nestedcv` objects in list element `xsub`. Or you can subset `x` using
+`final_vars`. For example:
+
+```{r eval=FALSE}
+sh <- explain(fit, X = fit$xsub, pred_wrapper = pred_nestcv_glmnet, nsim = 5)
+plot_shap_bar(sh, fit$xsub)
+
+sh <- explain(fit, X = x[, fit$final_vars], pred_wrapper = pred_nestcv_glmnet, nsim = 5)
+plot_shap_bar(sh, x[, fit$final_vars])
+```
 
 ### Citation
 

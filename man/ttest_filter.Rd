@@ -2,11 +2,52 @@
 % Please edit documentation in R/filters.R
 \name{ttest_filter}
 \alias{ttest_filter}
-\title{t-test filter}
+\alias{anova_filter}
+\alias{wilcoxon_filter}
+\alias{correl_filter}
+\title{Univariate filters}
 \usage{
 ttest_filter(
   y,
   x,
+  force_vars = NULL,
+  nfilter = NULL,
+  p_cutoff = 0.05,
+  rsq_cutoff = NULL,
+  type = c("index", "names", "full"),
+  keep_factors = TRUE,
+  ...
+)
+
+anova_filter(
+  y,
+  x,
+  force_vars = NULL,
+  nfilter = NULL,
+  p_cutoff = 0.05,
+  rsq_cutoff = NULL,
+  type = c("index", "names", "full"),
+  keep_factors = TRUE,
+  ...
+)
+
+wilcoxon_filter(
+  y,
+  x,
+  force_vars = NULL,
+  nfilter = NULL,
+  p_cutoff = 0.05,
+  rsq_cutoff = NULL,
+  type = c("index", "names", "full"),
+  exact = FALSE,
+  keep_factors = TRUE,
+  ...
+)
+
+correl_filter(
+  y,
+  x,
+  method = "pearson",
   force_vars = NULL,
   nfilter = NULL,
   p_cutoff = 0.05,
@@ -46,7 +87,14 @@ factors are converted to numeric values 0/1 and analysed as such. If
 not filtered and are retained. If \code{keep_factors} is \code{FALSE}, they are
 removed.}
 
-\item{...}{optional arguments, e.g. \code{rsq_method}: see \code{\link[=collinear]{collinear()}}.}
+\item{...}{optional arguments, including \code{rsq_method} passed to \code{\link[=collinear]{collinear()}}
+or arguments passed to \link[matrixTests:wilcoxon]{matrixTests::row_wilcoxon_twosample} in
+\code{\link[=wilcoxon_filter]{wilcoxon_filter()}}.}
+
+\item{exact}{Logical whether exact or approximate p-value is calculated.
+Default is \code{FALSE} for speed.}
+
+\item{method}{Type of correlation, either "pearson" or "spearman".}
 }
 \value{
 Integer vector of indices of filtered parameters (type = "index") or
@@ -55,8 +103,14 @@ of t-test p-value. If \code{type} is \code{"full"} full output from
 \link[Rfast:ttests]{Rfast::ttests} is returned.
 }
 \description{
-Simple univariate filter using t-test using the Rfast package for speed.
-Can be applied to all or a subset of predictors.
+A selection of simple univariate filters using t-test, Wilcoxon test, one-way
+ANOVA or correlation (Pearson or Spearman) for ranking variables. These
+filters are designed for speed. \code{ttest_filter} uses the \code{Rfast} package,
+\code{wilcoxon_filter} (Mann-Whitney) test uses
+\link[matrixTests:wilcoxon]{matrixTests::row_wilcoxon_twosample}, \code{anova_filter} uses
+\link[matrixTests:oneway]{matrixTests::col_oneway_welch} (Welch's F-test) from the \code{matrixTests}
+package. Can be applied to all or a subset of predictors. For mixed datasets
+(combined continuous & categorical) see \code{\link[=stat_filter]{stat_filter()}}
 }
 \examples{
 ## sigmoid function
@@ -74,4 +128,14 @@ ttest_filter(y2, dt)  # returns index of filtered predictors
 ttest_filter(y2, dt, type = "name")  # shows names of predictors
 ttest_filter(y2, dt, type = "full")  # full results table
 
+data(iris)
+dt <- iris[, 1:4]
+y3 <- iris[, 5]
+anova_filter(y3, dt)  # returns index of filtered predictors
+anova_filter(y3, dt, type = "full")  # shows names of predictors
+anova_filter(y3, dt, type = "name")  # full results table
+
+}
+\seealso{
+\code{\link[=lm_filter]{lm_filter()}} \code{\link[=stat_filter]{stat_filter()}}
 }
