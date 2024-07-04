@@ -17,11 +17,11 @@
 #' @param x Matrix of predictors. Dataframes will be coerced to a matrix as
 #'   is necessary for glmnet.
 #' @param family Either a character string representing one of the built-in
-#'   families, or else a `glm()` family object. Passed to [cv.glmnet] and
-#'   [glmnet]
+#'   families, or else a `glm()` family object. Passed to [glmnet::cv.glmnet]
+#'   and [glmnet::glmnet]
 #' @param filterFUN Filter function, e.g. [ttest_filter] or [relieff_filter].
 #'   Any function can be provided and is passed `y` and `x`. Must return a
-#'   character vector with names of filtered predictors.
+#'   numeric vector with indices of filtered predictors.
 #' @param filter_options List of additional arguments passed to the filter
 #'   function specified by `filterFUN`.
 #' @param balance Specifies method for dealing with imbalanced class data.
@@ -58,7 +58,7 @@
 #'   0=lambda.min to 1=lambda.1se
 #' @param keep Logical indicating whether inner CV predictions are retained for
 #'   calculating left-out inner CV fold accuracy etc. See argument `keep` in
-#'   [cv.glmnet].
+#'   [glmnet::cv.glmnet].
 #' @param outer_train_predict Logical whether to save predictions on outer
 #'   training folds to calculate performance on outer training folds.
 #' @param weights Weights applied to each sample. Note `weights` and `balance`
@@ -67,8 +67,8 @@
 #' @param penalty.factor Separate penalty factors can be applied to each
 #'   coefficient. Can be 0 for some variables, which implies no shrinkage, and
 #'   that variable is always included in the model. Default is 1 for all
-#'   variables. See [glmnet]. Note this works separately from filtering. For
-#'   some `nestedcv` filter functions you might need to set `force_vars` to
+#'   variables. See [glmnet::glmnet]. Note this works separately from filtering.
+#'   For some `nestedcv` filter functions you might need to set `force_vars` to
 #'   avoid filtering out features.
 #' @param cv.cores Number of cores for parallel processing of the outer loops.
 #'   NOTE: this uses `parallel::mclapply` on unix/mac and `parallel::parLapply`
@@ -85,7 +85,7 @@
 #'   `NA` are removed from 'x' to preserve cases. Any other value means that
 #'   `NA` are ignored (a message is given).
 #' @param verbose Logical whether to print messages and show progress
-#' @param ... Optional arguments passed to [cv.glmnet]
+#' @param ... Optional arguments passed to [glmnet::cv.glmnet]
 #' @return An object with S3 class "nestcv.glmnet"
 #'   \item{call}{the matched call}
 #'   \item{output}{Predictions on the left-out outer folds}
@@ -208,10 +208,11 @@ nestcv.glmnet <- function(y, x,
   if (is.factor(y) && !family %in% c("binomial", "multinomial"))
     stop("`y` is not numeric: incorrect `family`")
   x <- as.matrix(x)
+  if (!is.numeric(x)) stop("`x` cannot be coerced to a numeric matrix")
   if (is.null(colnames(x))) colnames(x) <- paste0("V", seq_len(ncol(x)))
   ok <- checkxy(y, x, na.option, weights)
   y <- if (is.matrix(y)) y[ok$r, ] else y[ok$r]
-  x <- x[ok$r, ok$c]
+  x <- x[ok$r, ok$c, drop = FALSE]
   weights <- weights[ok$r]
   if (!is.null(balance) && !is.null(weights)) {
     stop("`balance` and `weights` cannot be used at the same time")}

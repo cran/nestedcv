@@ -8,9 +8,10 @@
 #' @param x Dataframe or matrix of predictors. Matrix will be coerced to
 #'   dataframe as this is the default for SuperLearner.
 #' @param filterFUN Filter function, e.g. [ttest_filter] or [relieff_filter].
-#'   Any function can be provided and is passed `y` and `x`. Must return a
-#'   character vector with names of filtered predictors. Not available if
-#'   `outercv` is called with a formula.
+#'   Any function can be provided and is passed `y` and `x`. Ideally returns a
+#'   numeric vector with indices of filtered predictors. The custom function can
+#'   return a character vector of names of the filtered predictors, but this
+#'   will not work with the `penalty.factor` argument in [nestcv.glmnet()].
 #' @param filter_options List of additional arguments passed to the filter
 #'   function specified by `filterFUN`.
 #' @param weights Weights applied to each sample for models which can use
@@ -115,7 +116,7 @@ nestcv.SuperLearner <- function(y, x,
   ncv.call <- match.call(expand.dots = TRUE)
   ok <- checkxy(y, x, na.option, weights)
   y <- y[ok$r]
-  x <- x[ok$r, ok$c]
+  x <- x[ok$r, ok$c, drop = FALSE]
   weights <- weights[ok$r]
   if (!is.null(balance) & !is.null(weights)) {
     stop("`balance` and `weights` cannot be used at the same time")}

@@ -31,7 +31,7 @@ nest_filt_bal <- function(test, y, x,
     args <- list(y = ytrain, x = xtrain)
     args <- append(args, filter_options)
     fset <- do.call(filterFUN, args)
-    filt_xtrain <- xtrain[, fset]
+    filt_xtrain <- xtrain[, fset, drop = FALSE]
     filt_xtest <- xtest[, fset, drop = FALSE]
     filt_pen.factor <- penalty.factor[fset]
   }
@@ -79,7 +79,7 @@ nest_filt_bal <- function(test, y, x,
   out <- list(ytrain = ytrain, ytest = ytest,
               filt_xtrain = filt_xtrain, filt_xtest = filt_xtest,
               filt_pen.factor = filt_pen.factor)
-  if (modifyX_useY) out$modify_fit <- modfit
+  if (!is.null(modifyX) & modifyX_useY) out$modify_fit <- modfit
   out
 }
 
@@ -99,7 +99,7 @@ weight <- function(y) {
   tab <- c(table(y))
   props <- 1/tab
   weights <- props[as.numeric(y)]
-  weights <- weights / sum(weights, na.rm = TRUE)
+  weights <- weights / mean(weights, na.rm = TRUE)
   weights
 }
 
