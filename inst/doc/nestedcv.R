@@ -52,11 +52,11 @@ legend('bottomright', legend = c("Nested CV", "Left-out inner CV folds",
                                  "Test partition, non-nested filtering"), 
        col = c("black", "blue", "red"), lty = 1, lwd = 2, bty = "n")
 
-## ----out.width='75%', fig.align="center", echo=FALSE--------------------------
-knitr::include_graphics("fig1.svg")
+## ----fig.align="center", echo=FALSE-------------------------------------------
+knitr::include_graphics("fig1.png")
 
-## ----out.width='75%', fig.align="center", echo=FALSE--------------------------
-knitr::include_graphics("fig2.svg")
+## ----fig.align="center", echo=FALSE-------------------------------------------
+knitr::include_graphics("fig2.png")
 
 ## ----eval = FALSE-------------------------------------------------------------
 #  # Raw RNA-Seq data for this example is located at:
