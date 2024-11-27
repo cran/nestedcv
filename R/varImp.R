@@ -29,6 +29,20 @@ cv_coef <- function(x, level = 1) {
 }
 
 
+list_coef <- function(x, level = 1) {
+  lset <- lapply(x, function(xi) {
+    if (!inherits(xi, "nestcv.glmnet")) stop("Not a `nestcv.glmnet` object")
+    cfset <- lapply(xi$outer_result, function(i) {
+      if (is.list(i$coef)) {
+        coef(i$cvafit)[[level]][,1][-1]  # multinomial
+      } else i$coef[-1]
+    })
+    cfset
+  })
+  lset <- unlist(lset, recursive = FALSE)
+  list2matrix(lset)
+}
+
 #' Extract variable importance from outer CV caret models
 #' 
 #' Extracts variable importance or coefficients from outer CV glmnet models from
@@ -54,6 +68,16 @@ cv_varImp <- function(x) {
     vset$Final <- extractImp(x$final_fit)
   }
   list2matrix(vset)
+}
+
+
+list_varImp <- function(x) {
+  lset <- lapply(x, function(xi) {
+    if (!inherits(xi, "nestcv.train")) stop("Not a `nestcv.train` object")
+    lapply(xi$outer_result, function(j) extractImp(j$fit))
+  })
+  lset <- unlist(lset, recursive = FALSE)
+  list2matrix(lset)
 }
 
 
@@ -99,7 +123,11 @@ list2matrix <- function(x, na.val = 0) {
 #' recommend using SHAP values - see the vignette "Explaining nestedcv models
 #' with Shapley values". See [pred_train()] for an example.
 #' 
-#' @param x a `nestcv.glmnet` or `nestcv.train` fitted object
+#' @param x a `nestcv.glmnet` or `nestcv.train` fitted object or a list of
+#'   these, or a `repeatcv` object.
+#' @param ranks Logical whether to rank variables by importance
+#' @param summary Logical whether to return summary statistics on variable
+#'   importance. Ignored if `ranks` is `TRUE`.
 #' @param percent Logical for `nestcv.glmnet` objects only, whether to scale
 #'   coefficients to percentage of the largest coefficient in each model
 #' @param level For multinomial `nestcv.glmnet` models only, either an integer
@@ -107,8 +135,12 @@ list2matrix <- function(x, na.val = 0) {
 #'   specified as a character value
 #' @param sort Logical whether to sort variables by mean importance
 #' @param ... Optional arguments for compatibility
-#' @return Dataframe containing mean, sd, sem of variable importance and
-#'   frequency by which each variable is selected in outer folds.
+#' @return If `ranks` is `FALSE` and `summary` is `TRUE`, returns a dataframe
+#'   containing mean, sd, sem of variable importance and frequency by which each
+#'   variable is selected in outer folds. If `summary` is `FALSE`, a matrix of
+#'   either variable importance or, if `ranks = TRUE`, rankings  across the
+#'   outer folds and the final model is returned, with variables in rows and
+#'   folds in columns.
 #' @details
 #' Note that for caret models [caret::varImp()] may require the model package to
 #' be fully loaded in order to function. During the fitting process `caret`
@@ -124,10 +156,13 @@ var_stability <- function(x, ...) {
 #' @importFrom stats sd
 #' @export
 var_stability.nestcv.glmnet <- function(x,
+                                        ranks = FALSE,
+                                        summary = TRUE,
                                         percent = TRUE,
                                         level = 1,
                                         sort = TRUE, ...) {
-  m <- cv_coef(x, level)
+  m <- if (inherits(x, "list")) {list_coef(x, level)
+  } else cv_coef(x, level)
   vdir <- sign(rowMeans(m))
   if (percent) {
     # cm <- Rfast::colMaxs(m, value = TRUE)
@@ -138,6 +173,13 @@ var_stability.nestcv.glmnet <- function(x,
     }
     m <- t(t(abs(m)) / cm * 100)
   }
+  
+  if (ranks) {
+    mrank <- apply(abs(m), 2, function(x) rank(-x, ties.method = "average"))
+    return(mrank)
+  }
+  if (!summary) return(m)
+  
   mm <- rowMeans(m)
   msd <- apply(m, 1, sd)
   msem <- msd/sqrt(ncol(m))
@@ -147,9 +189,11 @@ var_stability.nestcv.glmnet <- function(x,
   df$sign <- vdir[rownames(df)]
   df$direction <- factor(df$sign, levels = c(-1, 1),
                          labels = c("negative", "positive"))
-  df$final <- "no"
-  df$final[m[, "Final"] != 0] <- "yes"
-  df$final <- factor(df$final)
+  if ("Final" %in% colnames(m)) {
+    df$final <- "no"
+    df$final[m[, "Final"] != 0] <- "yes"
+    df$final <- factor(df$final)
+  }
   if (!sort) return(df)
   df[order(abs(df$mean), decreasing = TRUE), ]
 }
@@ -158,8 +202,18 @@ var_stability.nestcv.glmnet <- function(x,
 #' @rdname var_stability
 #' @export
 var_stability.nestcv.train <- function(x,
+                                       ranks = FALSE,
+                                       summary = TRUE,
                                        sort = TRUE, ...) {
-  m <- cv_varImp(x)
+  m <- if (inherits(x, "list")) {list_varImp(x)
+  } else m <- cv_varImp(x)
+  
+  if (ranks) {
+    mrank <- apply(m, 2, function(x) rank(-x, ties.method = "average"))
+    return(mrank)
+  }
+  if (!summary) return(m)
+  
   mm <- rowMeans(m)
   msd <- apply(m, 1, sd)
   msem <- msd/sqrt(ncol(m))
@@ -177,9 +231,27 @@ var_stability.nestcv.train <- function(x,
   df$final <- "no"
   df$final[rownames(df) %in% x$final_vars] <- "yes"
   df$final <- factor(df$final)
-  df <- df[df$freq > 0, ]
+  df <- df[df$frequency > 0, ]
   if (!sort) return(df)
   df[order(abs(df$mean), decreasing = TRUE), ]
+}
+
+
+#' @export
+var_stability.list <- function(x, ...) {
+  if (inherits(x[[1]], "nestcv.glmnet"))
+    return(var_stability.nestcv.glmnet(x, ...))
+  if (inherits(x[[1]], "nestcv.train"))
+    return(var_stability.nestcv.train(x, ...))
+  stop("not a nestcv.glmnet or nestcv.train object")
+}
+
+
+#' @rdname var_stability
+#' @export
+var_stability.repeatcv <- function(x, ...) {
+  if (is.null(x$fits)) stop("missing outer CV fitted models", call. = FALSE)
+  var_stability.list(x$fits, ...)
 }
 
 
@@ -190,7 +262,8 @@ var_stability.nestcv.train <- function(x,
 #' which variables are selected across the outer folds and optionally overlays
 #' directionality for binary response outcome.
 #'
-#' @param x a `nestcv.glmnet` or `nestcv.train` fitted object
+#' @param x a `nestcv.glmnet` or `nestcv.train` fitted object or a list of
+#'   these, or a `repeatcv` object.
 #' @param final Logical whether to restrict variables to only those which ended
 #'   up in the final fitted model or to include all variables selected across
 #'   all outer folds.
@@ -230,7 +303,8 @@ plot_var_stability <- function(x,
                                sort = TRUE) {
   df <- var_stability(x, percent = percent, level = level, sort = sort)
   df$name <- factor(rownames(df), levels = rownames(df))
-  if (!sort) final <- FALSE
+  if (!sort | inherits(x, "list")) final <- FALSE
+  
   if (final) {
     fv <- if (inherits(x, "nestcv.glmnet")) {
       if (is.list(coef(x))) {
@@ -240,13 +314,16 @@ plot_var_stability <- function(x,
     } else if (inherits(x, "nestcv.train")) {
       x$final_vars
     }
-    if (!all(fv %in% rownames(df))) {
-      message(paste(fv[!fv %in% rownames(df)], collapse = ", "),
-              " not in final model")
-      fv <- fv[fv %in% rownames(df)]
+    if (!is.null(fv)) {
+      if (!all(fv %in% rownames(df))) {
+        message(paste(fv[!fv %in% rownames(df)], collapse = ", "),
+                " not in final model")
+        fv <- fv[fv %in% rownames(df)]
+      }
+      df <- df[rownames(df) %in% fv, ]
     }
-    df <- df[rownames(df) %in% fv, ]
   }
+  
   if (!is.null(top) && top < nrow(df)) df <- df[1:top, ]
   if (!percent & inherits(x, "nestcv.glmnet")) {
     if (direction == 1) {
@@ -256,8 +333,12 @@ plot_var_stability <- function(x,
   } else xtitle <- "Variable importance"
   if (is.null(breaks)) {
     nof <- length(x$outer_folds)
-    pr <- unique(round(pretty(c(1, nof), n = 4)))
-    breaks <- setNames(c(pr, nof+1), c(as.character(pr), "all"))
+    if (nof > 0) {
+      pr <- unique(round(pretty(c(1, nof), n = 4)))
+      breaks <- setNames(c(pr, nof+1), c(as.character(pr), "all"))
+    } else {
+      breaks <- pretty(c(1, max(df$frequency)))
+    }
   }
   
   if (direction != 0 && !"direction" %in% colnames(df)) {
@@ -410,4 +491,84 @@ barplot_var_stability <- function(x,
       theme_minimal() +
       theme(axis.text = element_text(colour = "black"))
   }
+}
+
+
+#' Plot variable importance rankings
+#' 
+#' Plots variables selected in models ranked by variable importance across the
+#' outer folds as well as the final model.
+#' 
+#' @param x A `nestcv.glmnet` or `nestcv.train` fitted object or a list of
+#'   these, or a `repeatcv` object.
+#' @param sort Logical whether to sort variable by mean rank.
+#' @param scheme Optional vector of colours which is passed to
+#'   `ggplot2::scale_color_manual()`. The vector is recycled, so a single value
+#'   will colour all points in the same colour, while two values will lead to
+#'   alternating row colours.
+#' @param cex Scaling for adjusting point spacing. See
+#'   `ggbeeswarm::geom_beeswarm()`.
+#' @param corral.width Numeric specifying width of corral, passed to
+#'   `geom_beeswarm`
+#' @param ... Optional arguments passed to `ggbeeswarm::geom_beeswarm()` e.g.
+#'   `size`.
+#' @returns A ggplot2 plot.
+#' @importFrom ggplot2 stat_summary scale_x_continuous scale_color_manual
+#' @export
+plot_var_ranks <- function(x, sort = TRUE,
+                           scheme = NULL,
+                           cex = 1,
+                           corral.width = 0.75, ...) {
+  vr <- var_stability(x, ranks = TRUE)
+  meanrank <- rowMeans(vr)
+  v_ord <- rownames(vr)[order(meanrank)]
+  df <- data.frame(var = rep(rownames(vr), each = ncol(vr)),
+                   rank = as.vector(t(vr)))
+  df$var <- factor(df$var, if (sort) rev(v_ord) else rev(rownames(vr)))
+  if (!is.null(scheme)) scheme <- rep_len(scheme, length(meanrank))
+  
+  ggplot(data = df, aes(x = .data$rank, y = .data$var, col = .data$var)) +
+    ggbeeswarm::geom_beeswarm(cex = cex,
+                              corral = "random",
+                              corral.width = corral.width, ...) +
+    stat_summary(fun = mean, geom = 'point', size = 4, shape = 5,
+                 col = "black") +
+    scale_x_continuous(n.breaks = 8) +
+    (if (!is.null(scheme)) scale_color_manual(values = scheme)) +
+    ylab("") + xlab("Variable ranking") +
+    theme_classic() +
+    theme(axis.text = element_text(colour = "black"),
+          legend.position = "none")
+}
+
+
+#' @rdname plot_var_ranks
+#' @importFrom ggplot2 geom_histogram scale_y_continuous facet_wrap
+#' @export
+hist_var_ranks <- function(x, sort = TRUE,
+                           scheme = NULL) {
+  vr <- var_stability(x, ranks = TRUE)
+  meanrank <- rowMeans(vr)
+  v_ord <- rownames(vr)[order(meanrank)]
+  df <- data.frame(var = rep(rownames(vr), each = ncol(vr)),
+                   rank = as.vector(t(vr)))
+  df$var <- factor(df$var, if (sort) v_ord else rownames(vr))
+  
+  vline <- data.frame(mean = meanrank, var = rownames(vr))
+  vline$var <- factor(vline$var, if (sort) v_ord else rownames(vr))
+  if (!is.null(scheme)) scheme <- rep_len(scheme, length(meanrank))
+  
+  ggplot(data = df, aes(x = .data$rank, fill = .data$var, col = .data$var)) +
+    geom_histogram(alpha = 0.6, binwidth = 1) +
+    scale_x_continuous(n.breaks = 8) +
+    scale_y_continuous(n.breaks = 3) +
+    (if (!is.null(scheme)) scale_color_manual(values = scheme)) +
+    (if (!is.null(scheme)) scale_fill_manual(values = scheme)) +
+    geom_vline(data = vline, aes(xintercept = .data$mean)) +
+    ylab("Frequency") + xlab("Variable ranking") +
+    facet_wrap(~var, ncol = 1, strip.position = "right") +
+    theme_minimal() +
+    theme(axis.text = element_text(colour = "black"),
+          strip.text.y.right = element_text(angle = 0),
+          legend.position = "none")
 }

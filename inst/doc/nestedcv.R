@@ -1,4 +1,5 @@
 ## ----setup, include = FALSE---------------------------------------------------
+knitr::knit_hooks$set(pngquant = knitr::hook_pngquant)
 knitr::opts_chunk$set(
   collapse = TRUE,
   warning = FALSE

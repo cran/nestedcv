@@ -1,6 +1,19 @@
 News
 =====
 
+# nestedcv 0.7.12
+###### 04/11/2024
+
+## New features
+* Analyse and plot variable importance by ranking of variables across outer CV 
+folds and repeats.
+* Changed `repeatcv` to enable return of fitted models from the outer CV for 
+variable importance or SHAP value calculation.
+
+# nestedcv 0.7.11
+###### 10/09/2024
+* Added back Pearson r^2 as a metric for comparison in regression analyses.
+
 # nestedcv 0.7.10
 ###### 29/07/2024
 * Fixed oversized SVG figures in vignette.

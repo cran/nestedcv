@@ -1,4 +1,5 @@
 ## ----setup, include = FALSE---------------------------------------------------
+knitr::knit_hooks$set(pngquant = knitr::hook_pngquant)
 knitr::opts_chunk$set(
   collapse = TRUE,
   warning = FALSE
@@ -34,6 +35,15 @@ ggpubr::ggarrange(p1, p2, ncol=2)
 ## ----eval=FALSE---------------------------------------------------------------
 #  # change bubble colour scheme
 #  p1 + scale_fill_manual(values=c("orange", "green3"))
+
+## ----fig.dim = c(10, 5)-------------------------------------------------------
+# beeswarm plot of variable ranks 
+p1 <- plot_var_ranks(fit)
+
+# histogram of variable ranks
+p2 <- hist_var_ranks(fit)
+
+ggpubr::ggarrange(p1, p2, ncol=2)
 
 ## -----------------------------------------------------------------------------
 library(fastshap)
