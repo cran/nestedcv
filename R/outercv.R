@@ -48,13 +48,11 @@
 #' @param n_outer_folds Number of outer CV folds
 #' @param outer_folds Optional list containing indices of test folds for outer
 #'   CV. If supplied, `n_outer_folds` is ignored.
+#' @param parallel_mode Either "mclapply", "parLapply" or "future". This
+#'   determines which parallel backend to use. The default is
+#'   `parallel::mclapply` on unix/mac and `parallel::parLapply` on windows.
 #' @param cv.cores Number of cores for parallel processing of the outer loops.
-#' @param multicore_fork Logical whether to use forked multicore parallel
-#'   processing. Forked multicore processing uses `parallel::mclapply`. It is
-#'   only available on unix/mac as windows does not allow forking. It is set to
-#'   `FALSE` by default in windows and `TRUE` in unix/mac. Non-forked parallel
-#'   processing is executed using `parallel::parLapply` or `pbapply::pblapply`
-#'   if `verbose` is `TRUE`.
+#'   Ignored if `parallel_mode = "future"`.
 #' @param predict_type Only used with binary classification. Calculation of ROC
 #'   AUC requires predicted class probabilities from fitted models. Most model
 #'   functions use syntax of the form `predict(..., type = "prob")`. However,
@@ -200,8 +198,8 @@ outercv.default <- function(y, x,
                             outer_method = c("cv", "LOOCV"),
                             n_outer_folds = 10,
                             outer_folds = NULL,
+                            parallel_mode = NULL,
                             cv.cores = 1,
-                            multicore_fork = (Sys.info()["sysname"] != "Windows"),
                             predict_type = "prob",
                             outer_train_predict = FALSE,
                             returnList = FALSE,
@@ -236,13 +234,22 @@ outercv.default <- function(y, x,
   if (outercv.call$model == "glm") predict_type <- "response"
   if (outercv.call$model == "mda") predict_type <- "posterior"
   
+  if (is.null(parallel_mode)) {
+    parallel_mode <- if (Sys.info()["sysname"] == "Windows" & cv.cores >= 2) {
+      "parLapply"
+    } else "mclapply"
+  } else {
+    parallel_mode <- match.arg(parallel_mode,
+                                 c("mclapply", "parLapply", "future"))
+  }
+  
   verbose <- as.numeric(verbose)
-  if (verbose == 1 && (!multicore_fork || Sys.getenv("RSTUDIO") == "1")) {
+  if (verbose == 1 && (parallel_mode != "mclapply" || Sys.getenv("RSTUDIO") == "1")) {
     message("Performing ", n_outer_folds, "-fold outer CV, using ",
             plural(cv.cores, "core(s)"))}
   
   dots <- list(...)
-  if (!multicore_fork && cv.cores >= 2) {
+  if (parallel_mode == "parLapply") {
     cl <- makeCluster(cv.cores)
     varlist <- c("outer_folds", "y", "x", "model", "reg","filterFUN", 
                  "filter_options", "weights", "balance", "balance_options",
@@ -282,6 +289,16 @@ outercv.default <- function(y, x,
         do.call(outercvCore, args)
       })
     }
+  } else if (parallel_mode == "future") {
+    # future
+    outer_res <- future_lapply(seq_along(outer_folds), function(i) {
+      outercvCore(i, y, x, outer_folds, model, reg,
+                  filterFUN, filter_options, weights,
+                  balance, balance_options,
+                  modifyX, modifyX_useY, modifyX_options,
+                  predict_type,
+                  outer_train_predict, verbose, suppressMsg, ...)
+    }, future.seed = TRUE)
   } else {
     # linux/mac, forked
     outer_res <- mclapply(seq_along(outer_folds), function(i) {
@@ -411,10 +428,17 @@ outercvCore <- function(i, y, x, outer_folds, model, reg,
   predy <- predict(fit, newdata = filt_xtest)
   preds <- data.frame(predy=predy, testy=ytest)
   # for AUC
-  if (!reg & nlevels(y) == 2) {
+  if (!reg) {
     predyp <- predict(fit, newdata = filt_xtest, type = predict_type)
-    if (!is.vector(predyp)) predyp <- predyp[,2]
-    preds$predyp <- predyp
+    if (nlevels(y) == 2) {
+      # binary
+      if (!is.vector(predyp)) predyp <- predyp[,2]
+      preds$predyp <- predyp
+    } else {
+      # multiclass
+      if (ncol(predyp) != nlevels(y)) warning("non-standard multiclass probabilities")
+      preds <- cbind(preds, predyp)
+    }
   }
   rownames(preds) <- rownames(filt_xtest)
   if (outer_train_predict) {
@@ -422,9 +446,9 @@ outercvCore <- function(i, y, x, outer_folds, model, reg,
     train_preds <- data.frame(ytrain=ytrain, predy=predy)
     rownames(train_preds) <- rownames(filt_xtrain)
     # for AUC
-    if (!reg & nlevels(y) == 2) {
+    if (!reg) {
       predyp <- predict(fit, newdata = filt_xtrain, type = predict_type)
-      if (!is.vector(predyp)) predyp <- predyp[,2]
+      if (nlevels(y) == 2 && !is.vector(predyp)) predyp <- predyp[,2]
       train_preds <- cbind(train_preds, predyp)
     }
   } else train_preds <- NULL
@@ -451,8 +475,8 @@ outercv.formula <- function(formula, data,
                             outer_method = c("cv", "LOOCV"),
                             n_outer_folds = 10,
                             outer_folds = NULL,
+                            parallel_mode = NULL,
                             cv.cores = 1,
-                            multicore_fork = (Sys.info()["sysname"] != "Windows"),
                             predict_type = "prob",
                             outer_train_predict = FALSE,
                             verbose = FALSE,
@@ -481,12 +505,22 @@ outercv.formula <- function(formula, data,
     m <- model.frame(terms(reformulate(attributes(Terms)$term.labels)),
                      data.frame(m))
     out <- outercv.default(y, m, outer_method = outer_method, 
-                           n_outer_folds = n_outer_folds, cv.cores = cv.cores, ...)
+                           n_outer_folds = n_outer_folds,
+                           parallel_mode = parallel_mode, cv.cores = cv.cores, ...)
     return(out)
   }
   # for models designed for formula method
+  if (is.null(parallel_mode)) {
+    parallel_mode <- if (Sys.info()["sysname"] == "Windows" & cv.cores >= 2) {
+      "parLapply"
+    } else "mclapply"
+  } else {
+    parallel_mode <- match.arg(parallel_mode,
+                                 c("mclapply", "parLapply", "future"))
+  }
+  
   verbose <- as.numeric(verbose)
-  if (verbose == 1 && (!multicore_fork || Sys.getenv("RSTUDIO") == "1")) {
+  if (verbose == 1 && (parallel_mode != "mclapply" || Sys.getenv("RSTUDIO") == "1")) {
     message("Performing ", n_outer_folds, "-fold outer CV, using ",
             plural(cv.cores, "core(s)"))}
   
@@ -501,7 +535,8 @@ outercv.formula <- function(formula, data,
   if (outercv.call$model == "glm") predict_type <- "response"
   
   dots <- list(...)
-  if (Sys.info()["sysname"] == "Windows" & cv.cores >= 2) {
+  
+  if (parallel_mode == "parLapply") {
     cl <- makeCluster(cv.cores)
     clusterExport(cl, varlist = c("outer_folds", "formula", "data", "y", 
                                   "model", "reg", "predict_type",
@@ -516,7 +551,15 @@ outercv.formula <- function(formula, data,
                 dots)
       do.call(outercvFormulaCore, args)
     })
+  } else if (parallel_mode == "future") {
+    # future
+    outer_res <- future_lapply(seq_along(outer_folds), function(i) {
+      outercvFormulaCore(i, outer_folds, formula, data, y, model,
+                         reg, predict_type, outer_train_predict, verbose,
+                         suppressMsg, ...)
+    }, future.seed = TRUE)
   } else {
+    # mclapply
     outer_res <- mclapply(seq_along(outer_folds), function(i) {
       outercvFormulaCore(i, outer_folds, formula, data, y, model,
                          reg, predict_type, outer_train_predict, verbose,
@@ -578,19 +621,26 @@ outercvFormulaCore <- function(i, outer_folds, formula, data, y, model,
   predy <- predict(fit, newdata = data[test, ])
   preds <- data.frame(predy=predy, testy=y[test])
   # for AUC
-  if (!reg & nlevels(y) == 2) {
+  if (!reg) {
     predyp <- predict(fit, newdata = data[test, ], type = predict_type)
-    if (!is.vector(predyp)) predyp <- predyp[,2]
-    preds$predyp <- predyp
+    if (nlevels(y) == 2) {
+      # binary
+      if (!is.vector(predyp)) predyp <- predyp[,2]
+      preds$predyp <- predyp
+    } else {
+      # multiclass
+      if (ncol(predyp) != nlevels(y)) warning("non-standard multiclass probabilities")
+      preds <- cbind(preds, predyp)
+    }
   }
   rownames(preds) <- rownames(data)[test]
   if (outer_train_predict) {
     predy <- predict(fit, newdata = data[test, ])
     train_preds <- data.frame(ytrain=y[-test], predy=predy)
     # for AUC
-    if (!reg & nlevels(y) == 2) {
+    if (!reg) {
       predyp <- predict(fit, newdata = data[-test, ], type = predict_type)
-      if (!is.vector(predyp)) predyp <- predyp[,2]
+      if (nlevels(y) == 2 && !is.vector(predyp)) predyp <- predyp[,2]
       train_preds <- cbind(train_preds, predyp)
     }
     rownames(train_preds) <- rownames(data)[-test]
