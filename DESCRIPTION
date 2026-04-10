@@ -1,6 +1,6 @@
 Package: nestedcv
 Title: Nested Cross-Validation with 'glmnet' and 'caret'
-Version: 0.8.0
+Version: 0.8.2
 Authors@R: 
     c(person(given = "Myles",family = "Lewis",
     role = c("aut", "cre"),
@@ -29,17 +29,19 @@ Depends: R (>= 4.1.0)
 Imports: caret, data.table, doParallel, foreach, future.apply, ggplot2,
         glmnet, matrixStats, matrixTests, methods, parallel, pROC,
         Rfast, RhpcBLASctl, rlang, ROCR
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 Suggests: Boruta, CORElearn, fastshap (>= 0.1.0), gbm, ggbeeswarm,
         ggpubr, hsstan, mda, mlbench, pbapply, pls, randomForest,
         ranger, RcppEigen, rmarkdown, knitr, SuperLearner
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2025-03-10 17:18:14 UTC; myles
-Author: Myles Lewis [aut, cre] (<https://orcid.org/0000-0001-9365-5345>),
-  Athina Spiliopoulou [aut] (<https://orcid.org/0000-0002-5929-6585>),
-  Cankut Cubuk [ctb] (<https://orcid.org/0000-0003-4646-0849>),
-  Katriona Goldmann [ctb] (<https://orcid.org/0000-0002-9073-6323>),
+Packaged: 2026-04-09 17:30:32 UTC; myles
+Author: Myles Lewis [aut, cre] (ORCID: <https://orcid.org/0000-0001-9365-5345>),
+  Athina Spiliopoulou [aut] (ORCID:
+    <https://orcid.org/0000-0002-5929-6585>),
+  Cankut Cubuk [ctb] (ORCID: <https://orcid.org/0000-0003-4646-0849>),
+  Katriona Goldmann [ctb] (ORCID:
+    <https://orcid.org/0000-0002-9073-6323>),
   Ryan C. Thompson [ctb]
 Repository: CRAN
-Date/Publication: 2025-03-10 17:40:02 UTC
+Date/Publication: 2026-04-10 07:50:02 UTC

@@ -85,7 +85,8 @@ ttest_filter <- function(y,
   factor_ind <- which_factor(x)
   if (is.data.frame(x)) x <- data.matrix(x)
   if (is.null(colnames(x))) colnames(x) <- seq_len(ncol(x))
-  res <- Rfast::ttests(x[indx1, ], x[indx2, ])
+  res <- Rfast::ttests(x[indx1, ], x[indx2, ]) |>
+    suppressWarnings()
   rownames(res) <- colnames(x)
   if (type == "full") {
     if (length(factor_ind) == 0) {
@@ -492,7 +493,9 @@ glmnet_filter <- function(y,
     penalty.factor[keep] <- 0
   } else keep <- NULL
   fit <- glmnet(x, y, family = family, penalty.factor = penalty.factor, ...)
-  cf <- as.matrix(coef(fit))
+  cf <- coef(fit)
+  if (family == "multinomial") cf <- do.call(cbind, cf)
+  cf <- as.matrix(cf)
   if (method == "mean") {
     cf <- abs(cf)
     out <- rowMeans(cf)  # mean abs coefs

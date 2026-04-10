@@ -1,6 +1,18 @@
 News
 =====
 
+# nestedcv 0.8.2
+###### 09/04/2026
+* Fix examples for noSuggests CRAN check
+* Fix multinomial `glmnet_filter`
+
+# nestedcv 0.8.1
+###### 26/09/2025
+* Fixed showing progress on linux
+* Allow `filterFUN`, `balance` and `modifyX` arguments to accept `"none"` which 
+has the same effect as `NULL`. This is to future-proof the package for comparing 
+filters etc.
+
 # nestedcv 0.8.0
 ###### 28/02/2025
 * Add future to `nestcv.glmnet`, `nestcv.train`, `outercv` and `repeatcv` 
